@@ -34,23 +34,15 @@ The LLM handles creative decisions: which notes, which motifs, how the pattern e
 
 ## How it works
 
-```
-BPM + Key
-  ↓
-Chord Progression (4 chords, harmonic contract)       ← Step 0
-  ↓                    ↓                    ↓
-Bass Generator    Arp Generator    Melody Generator    ← Step 1: parallel (LLM or offline)
-  ↓                    ↓                    ↓
-Validator ──────────────────────────────────────────── (scale, range, density, chord coherence)
-  ↓                    ↓                    ↓
-Style Profile    Style Profile    Style Profile        ← DynamicCurve + evolution
-  ↓                    ↓                    ↓
-Renderer ──────────────────────────────────────────── (velocity, timing, gate, CC)
-  ↓                    ↓                    ↓
-bassline.mid      arpeggio.mid      melody.mid
-```
+Cadenza works in two modes — with an LLM or fully offline — but the pipeline is the same in both cases.
 
-All three generators receive the same chord progression, so the MIDI files play together out of the box. The LLM owns musical creativity; the renderer owns professional sound — micro-timing, velocity grids, portamento, and filter automation are all deterministic.
+**Step 0** generates a shared chord progression of 4 chords (one per group of 4 bars). This is the harmonic contract that ties the three instruments together.
+
+**Step 1** runs three generators in parallel — bassline, arpeggio, and melody — each receiving the same chord progression. In LLM mode the model decides which notes to use, what motifs to build, and how the pattern evolves across 16 bars. In offline mode (`--no-llm`) a deterministic algorithm does the same job using a random UUID seed, so you still get different output every run.
+
+Either way, every generated pattern goes through the same **validator** (scale membership, MIDI range, density, chord coherence) and then through the same **renderer** (micro-timing offsets, velocity grids, portamento, filter sweeps, evolution arcs). The renderer is where the professional sound comes from — those details are hardcoded as style profiles, not left to the LLM.
+
+The result is always three MIDI files that are harmonically coherent and ready to use together in a DAW.
 
 ---
 

@@ -62,8 +62,8 @@ jobs:
 
       - name: Test Docker image (offline mode)
         run: |
+          mkdir -p output
           docker run --rm -v $(pwd)/output:/app/output cadenza:test \
             --bpm 122 --key Am --no-llm
-          test -f output/output_bassline_Am_122.mid
-          test -f output/output_arpeggio_Am_122.mid
-          test -f output/output_melody_Am_122.mid
+          count=$(ls output/*.mid 2>/dev/null | wc -l)
+          [ "$count" -eq 3 ] || (echo "Expected 3 MIDI files, got $count" && exit 1)
