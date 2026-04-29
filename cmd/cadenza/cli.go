@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -94,16 +95,17 @@ func scaleNoteString(root, scaleType string) string {
 }
 
 func printBanner() {
-	fmt.Println()
-	fmt.Println(sepLine)
-	fmt.Println()
-	fmt.Printf("    %s▁▂▄█▄▂▁%s  %sL L M I D I - G E N%s  %s▁▂▄█▄▂▁%s\n",
-		ansiCyan, ansiReset, ansiBold+ansiWhite, ansiReset, ansiCyan, ansiReset)
-	fmt.Println()
-	fmt.Printf("    %sAI Composition Engine for Electronic Music%s\n", ansiDim, ansiReset)
-	fmt.Printf("    %sProgressive House  ·  Melodic Techno  ·  Peak Techno%s\n", ansiDim, ansiReset)
-	fmt.Println()
-	fmt.Println(sepLine)
+	candidates := []string{"cadenzabanner.txt"}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "cadenzabanner.txt"))
+	}
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			fmt.Printf("\n%s%s%s\n\n", ansiCyan, string(data), ansiReset)
+			return
+		}
+	}
 	fmt.Println()
 }
 
