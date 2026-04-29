@@ -1,5 +1,5 @@
 .PHONY: build test lint run clean listening-test test-integration test-coverage \
-       docker docker-run release-snapshot help
+       docker docker-run release-snapshot release help
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -78,6 +78,19 @@ listening-test:
 	done
 	@echo "Done. Load output/listening/ files in DAW for A/B comparison."
 
+## Release
+
+release: build-all ## Package all platform binaries as zip archives in dist/
+	@mkdir -p dist
+	@zip -j dist/cadenza-$(VERSION)-linux-amd64.zip   bin/cadenza-linux-amd64
+	@zip -j dist/cadenza-$(VERSION)-linux-arm64.zip   bin/cadenza-linux-arm64
+	@zip -j dist/cadenza-$(VERSION)-darwin-amd64.zip  bin/cadenza-darwin-amd64
+	@zip -j dist/cadenza-$(VERSION)-darwin-arm64.zip  bin/cadenza-darwin-arm64
+	@zip -j dist/cadenza-$(VERSION)-windows-amd64.zip bin/cadenza-windows-amd64.exe
+	@zip -j dist/cadenza-$(VERSION)-windows-arm64.zip bin/cadenza-windows-arm64.exe
+	@echo "Release archives in dist/:"
+	@ls -lh dist/
+
 ## Docker
 
 docker:
@@ -118,4 +131,7 @@ help:
 	@echo "  make listening-test Generate patterns for DAW comparison"
 	@echo ""
 	@echo "Docker:"
-	@echo "  make docker-run     Run in container (offline mode)"
+	@echo "  make docker-run     Run in container (offline mode)
+	@echo ""
+	@echo "Release:"
+	@echo "  make release        Build + zip all platforms into dist/""

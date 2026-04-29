@@ -70,13 +70,108 @@ Output goes to `./output/` by default. Each run prints the generated files and t
 
 ---
 
+## Setup & Configuration
+
+Cadenza runs in three modes. Pick the one that fits you.
+
+### Mode 1 — Offline (no API key, no internet)
+
+The easiest option. Works out of the box.
+
+```bash
+./cadenza --bpm 122 --key Am --no-llm
+```
+
+The pattern generator is entirely algorithmic. Every run produces different output because it uses a random seed internally. The musical rules (scale, velocity, timing, chord coherence) are identical to LLM mode — you're not getting a worse product, just a different creative process.
+
+**Use this if:** you want to experiment quickly, you don't have an API key, or you need reproducible offline generation.
+
+---
+
+### Mode 2 — Claude (Anthropic API)
+
+Claude is the default provider. You need an Anthropic API key.
+
+**Step 1** — Get your API key from [console.anthropic.com](https://console.anthropic.com). It looks like `sk-ant-api03-...`.
+
+**Step 2** — Set it as an environment variable:
+
+```bash
+# macOS / Linux
+export ANTHROPIC_API_KEY=sk-ant-api03-...
+
+# Windows (PowerShell)
+$env:ANTHROPIC_API_KEY="sk-ant-api03-..."
+
+# Windows (Command Prompt)
+set ANTHROPIC_API_KEY=sk-ant-api03-...
+```
+
+To make it permanent, add the `export` line to your `~/.zshrc`, `~/.bashrc`, or Windows environment variables.
+
+**Step 3** — Run:
+
+```bash
+./cadenza --bpm 122 --key Am
+# or explicitly:
+./cadenza --bpm 122 --key Am --provider claude
+```
+
+Each run costs roughly $0.01–$0.03 depending on the model. The result is cached on disk (30-day TTL) so the same input won't hit the API twice.
+
+---
+
+### Mode 3 — Ollama (local LLM, no API costs)
+
+Run a local model on your machine. No internet required after the model is downloaded.
+
+**Step 1** — Install Ollama from [ollama.com](https://ollama.com).
+
+**Step 2** — Pull a model (run this once):
+
+```bash
+ollama pull qwen2.5:7b        # recommended — fast and good quality
+# or
+ollama pull llama3.2:3b       # lighter, less VRAM
+# or
+ollama pull mistral:7b        # good alternative
+```
+
+**Step 3** — Start the Ollama server (keep this running in a separate terminal):
+
+```bash
+ollama serve
+```
+
+**Step 4** — Run Cadenza pointing to Ollama:
+
+```bash
+./cadenza --bpm 126 --key Fm --provider ollama --model qwen2.5:7b
+```
+
+**Minimum hardware:** 8 GB RAM for `qwen2.5:7b`. A GPU is not required but makes generation faster.
+
+---
+
+### Choosing a mode at a glance
+
+| | Offline | Claude | Ollama |
+|---|---|---|---|
+| API key needed | No | Yes | No |
+| Internet needed | No | Yes | No (after download) |
+| Cost per run | Free | ~$0.01–0.03 | Free |
+| Creative variation | Algorithmic | LLM-driven | LLM-driven |
+| Speed | Instant | 5–15 s | 10–60 s |
+
+---
+
 ## Requirements
 
 | Mode | Requirement |
 |------|-------------|
-| `--no-llm` | Go 1.26+ only |
-| Claude | `ANTHROPIC_API_KEY` env var |
-| Ollama | Ollama running locally (`ollama serve`) |
+| `--no-llm` | None (static binary) |
+| Claude | `ANTHROPIC_API_KEY` environment variable |
+| Ollama | Ollama installed + `ollama serve` running |
 
 `make` is optional but recommended for the shortcuts below.
 
