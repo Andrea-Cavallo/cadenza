@@ -1,0 +1,11 @@
+bin/
+output/
+debug/
+coverage.out
+*.mid
+.git/
+.idea/
+.claude/
+.tokensave/
+docs/superpowers/
+cmd/llmidi-gen/llmidi-gen.exe

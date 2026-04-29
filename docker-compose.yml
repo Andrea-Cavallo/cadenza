@@ -1,0 +1,36 @@
+services:
+  cadenza:
+    build: .
+    volumes:
+      - ./output:/app/output
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    command: ["--bpm", "122", "--key", "Am", "--no-llm"]
+
+  cadenza-claude:
+    build: .
+    volumes:
+      - ./output:/app/output
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    command: ["--bpm", "122", "--key", "Am", "--provider", "claude"]
+
+  cadenza-ollama:
+    build: .
+    volumes:
+      - ./output:/app/output
+    depends_on:
+      - ollama
+    command: ["--bpm", "126", "--key", "Em", "--provider", "ollama", "--model", "qwen2.5:7b"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:

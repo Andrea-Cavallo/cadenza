@@ -1,0 +1,52 @@
+# Build output
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# MIDI output
+output/
+*.mid
+
+# Test and coverage
+coverage.out
+coverage.html
+*.test
+
+# Debug
+debug/
+
+# Cache
+.cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Token save (local tool)
+.tokensave/
+
+# Internal docs (not shipped)
+REFACTOR.md
+SPECS.md
+TODO.md
+docs/
+
+# Claude Code / AI
+CLAUDE.md
+.claude/

@@ -1,0 +1,44 @@
+version: 2
+
+builds:
+  - id: cadenza
+    main: ./cmd/cadenza/
+    binary: cadenza
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - prompts/*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github-native
+
+release:
+  github:
+    owner: Andrea-Cavallo
+    name: cadenza
+  draft: false
+  prerelease: auto
