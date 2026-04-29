@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/Andrea-Cavallo/cadenza/internal/cache"
 	"github.com/Andrea-Cavallo/cadenza/internal/llm"
@@ -85,6 +86,7 @@ func (mg *MultiGenerator) Generate(ctx context.Context, bpm float64, keyStr stri
 	}
 
 	seed := NewVariationSeed()
+	ts := time.Now().Format("20060102_150405")
 	prog := theory.SelectProgression(parsedKey.Root, parsedKey.Scale, seed)
 
 	slog.Info("chord progression",
@@ -140,7 +142,7 @@ func (mg *MultiGenerator) Generate(ctx context.Context, bpm float64, keyStr stri
 			return nil, fmt.Errorf("%s render: %w", pt, err)
 		}
 
-		filename := fmt.Sprintf("%s_%s_%s_%.0f.mid", "output", pt, keyStr, bpm)
+		filename := fmt.Sprintf("%s_%s_%s_%.0f_%s.mid", "output", pt, keyStr, bpm, ts)
 		outputPath := filepath.Join(mg.outputDir, filename)
 
 		if err := mg.writer.WriteFile(outputPath, events); err != nil {

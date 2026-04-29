@@ -277,9 +277,8 @@ func printSummary(cfg cliConfig) {
 
 // runInteractiveCLI presents the full producer-facing TUI and returns the
 // collected config. Returns ok=false when the user cancels or aborts.
+// The banner is printed once by main before the first call.
 func runInteractiveCLI() (cliConfig, bool) {
-	printBanner()
-
 	cfg := cliConfig{}
 
 	if !selectMode(&cfg) {

@@ -7,15 +7,15 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 ## Build
 
 build:
-	go build -ldflags="$(LDFLAGS)" -o bin/llmidi-gen ./cmd/llmidi-gen/
+	go build -ldflags="$(LDFLAGS)" -o bin/cadenza ./cmd/cadenza/
 
 build-all: ## Cross-compile for all platforms
-	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/llmidi-gen-linux-amd64 ./cmd/llmidi-gen/
-	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/llmidi-gen-linux-arm64 ./cmd/llmidi-gen/
-	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/llmidi-gen-darwin-amd64 ./cmd/llmidi-gen/
-	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/llmidi-gen-darwin-arm64 ./cmd/llmidi-gen/
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/llmidi-gen-windows-amd64.exe ./cmd/llmidi-gen/
-	GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/llmidi-gen-windows-arm64.exe ./cmd/llmidi-gen/
+	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-linux-amd64 ./cmd/cadenza/
+	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-linux-arm64 ./cmd/cadenza/
+	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-darwin-amd64 ./cmd/cadenza/
+	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-darwin-arm64 ./cmd/cadenza/
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-windows-amd64.exe ./cmd/cadenza/
+	GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-windows-arm64.exe ./cmd/cadenza/
 
 ## Test
 
@@ -50,16 +50,16 @@ fmt:
 ## Run
 
 run:
-	go run ./cmd/llmidi-gen/ --bpm 122 --key Am
+	go run ./cmd/cadenza/ --bpm 122 --key Am
 
 run-offline:
-	go run ./cmd/llmidi-gen/ --bpm 122 --key Am --no-llm
+	go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 
 run-claude:
-	go run ./cmd/llmidi-gen/ --bpm 122 --key Am --provider claude
+	go run ./cmd/cadenza/ --bpm 122 --key Am --provider claude
 
 run-ollama:
-	go run ./cmd/llmidi-gen/ --bpm 126 --key Em --provider ollama --model qwen2.5:7b
+	go run ./cmd/cadenza/ --bpm 126 --key Em --provider ollama --model qwen2.5:7b
 
 ## Listening test
 
@@ -68,12 +68,12 @@ listening-test:
 	@echo "Generating patterns for listening test..."
 	@for key in Am Em Fm Dm; do \
 		for bpm in 122 126 128; do \
-			go run ./cmd/llmidi-gen/ --bpm $$bpm --key $$key --no-llm --output output/listening; \
+			go run ./cmd/cadenza/ --bpm $$bpm --key $$key --no-llm --output output/listening; \
 		done; \
 	done
 	@for key in D C G; do \
 		for bpm in 120 124 128; do \
-			go run ./cmd/llmidi-gen/ --bpm $$bpm --key $$key --no-llm --output output/listening; \
+			go run ./cmd/cadenza/ --bpm $$bpm --key $$key --no-llm --output output/listening; \
 		done; \
 	done
 	@echo "Done. Load output/listening/ files in DAW for A/B comparison."
@@ -81,11 +81,11 @@ listening-test:
 ## Docker
 
 docker:
-	docker build -t llmidi-gen:$(VERSION) .
-	docker tag llmidi-gen:$(VERSION) llmidi-gen:latest
+	docker build -t cadenza:$(VERSION) .
+	docker tag cadenza:$(VERSION) cadenza:latest
 
 docker-run:
-	docker run --rm -v $(PWD)/output:/app/output llmidi-gen:latest --bpm 122 --key Am --no-llm
+	docker run --rm -v $(PWD)/output:/app/output cadenza:latest --bpm 122 --key Am --no-llm
 
 docker-compose-up:
 	docker compose up llmidi-gen
@@ -98,10 +98,10 @@ clean:
 ## Help
 
 help:
-	@echo "LLMIDI-Gen — AI-powered MIDI generator"
+	@echo "Cadenza — AI-powered MIDI generator"
 	@echo ""
 	@echo "Build:"
-	@echo "  make build          Build binary"
+	@echo "  make build          Build binary (bin/cadenza)"
 	@echo "  make build-all      Cross-compile all platforms"
 	@echo "  make docker         Build Docker image"
 	@echo ""
@@ -112,7 +112,7 @@ help:
 	@echo "  make lint           Run golangci-lint"
 	@echo ""
 	@echo "Run:"
-	@echo "  make run            Run with Claude (Am, 122 BPM)"
+	@echo "  make run            Interactive session (Claude, Am, 122 BPM)"
 	@echo "  make run-offline    Run without LLM"
 	@echo "  make run-ollama     Run with Ollama"
 	@echo "  make listening-test Generate patterns for DAW comparison"
