@@ -73,26 +73,11 @@ func (v *Validator) validate(spec *PatternSpec, prog *theory.ChordProgression) e
 }
 
 func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProgression, customBars int) error {
-	var errs []string
+	errs := validateMeta(spec, customBars)
 
-	if spec.Meta.BPM < 80 || spec.Meta.BPM > 150 {
-		errs = append(errs, fmt.Sprintf("bpm %.1f out of range [80, 150]", spec.Meta.BPM))
-	}
-
-	// Validate bars is a power of 2 between 16 and 128
-	validBars := map[int]bool{16: true, 32: true, 64: true, 128: true}
-	if !validBars[spec.Meta.Bars] {
-		errs = append(errs, fmt.Sprintf("bars must be 16, 32, 64, or 128, got %d", spec.Meta.Bars))
-	}
-
-	// If customBars is specified, verify it matches
-	if customBars > 0 && spec.Meta.Bars != customBars {
-		errs = append(errs, fmt.Sprintf("bars mismatch: spec has %d, expected %d", spec.Meta.Bars, customBars))
-	}
-
-	constraints, ok := constraintsByType[spec.PatternType]
+	constraints, ok, typeErr := constraintsFor(spec.PatternType)
 	if !ok {
-		errs = append(errs, fmt.Sprintf("unknown pattern_type %q", spec.PatternType))
+		errs = append(errs, typeErr)
 		return fmt.Errorf("validation failed:\n- %s", strings.Join(errs, "\n- "))
 	}
 
@@ -100,47 +85,96 @@ func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProg
 		errs = append(errs, fmt.Sprintf("unknown style_profile %q", spec.StyleProfile))
 	}
 
-	activeCount := 0
+	stepErrs, activeCount := validateMotif(spec, constraints)
+	errs = append(errs, stepErrs...)
+	errs = append(errs, validateDensity(activeCount, constraints, spec.PatternType)...)
+	errs = append(errs, validateEvolution(spec.Evolution)...)
+	errs = append(errs, v.validateOptionalChordCoherence(spec, prog)...)
+
+	if len(errs) > 0 {
+		return fmt.Errorf("validation failed:\n- %s", strings.Join(errs, "\n- "))
+	}
+	return nil
+}
+
+func validateMeta(spec *PatternSpec, customBars int) []string {
+	var errs []string
+	if spec.Meta.BPM < 80 || spec.Meta.BPM > 150 {
+		errs = append(errs, fmt.Sprintf("bpm %.1f out of range [80, 150]", spec.Meta.BPM))
+	}
+	if !validBarCount(spec.Meta.Bars) {
+		errs = append(errs, fmt.Sprintf("bars must be 16, 32, 64, or 128, got %d", spec.Meta.Bars))
+	}
+	if customBars > 0 && spec.Meta.Bars != customBars {
+		errs = append(errs, fmt.Sprintf("bars mismatch: spec has %d, expected %d", spec.Meta.Bars, customBars))
+	}
+	return errs
+}
+
+func validBarCount(bars int) bool {
+	return bars == 16 || bars == 32 || bars == 64 || bars == 128
+}
+
+func constraintsFor(patternType string) (constraints patternConstraints, ok bool, errMsg string) {
+	constraints, ok = constraintsByType[patternType]
+	if !ok {
+		return patternConstraints{}, false, fmt.Sprintf("unknown pattern_type %q", patternType)
+	}
+	return constraints, true, ""
+}
+
+func validateMotif(spec *PatternSpec, constraints patternConstraints) (errs []string, activeCount int) {
 	for i, step := range spec.Motif.Steps {
 		if !step.Active {
 			continue
 		}
 		activeCount++
+		errs = append(errs, validateActiveStep(spec, constraints, i, step)...)
+	}
+	return errs, activeCount
+}
 
-		if step.Note == "" {
-			errs = append(errs, fmt.Sprintf("step[%d] active but no note", i))
-			continue
-		}
-
-		midi, err := theory.NoteToMIDI(step.Note)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("step[%d] invalid note %q: %v", i, step.Note, err))
-			continue
-		}
-
-		if midi < constraints.minMIDI || midi > constraints.maxMIDI {
-			errs = append(errs, fmt.Sprintf("step[%d] note %s (MIDI %d) out of %s range [%d, %d]",
-				i, step.Note, midi, spec.PatternType, constraints.minMIDI, constraints.maxMIDI))
-		}
-
-		noteName := theory.NoteNameOnly(step.Note)
-		inScale, err := theory.NoteInScale(noteName, spec.Theory.Key, spec.Theory.Scale)
-		if err == nil && !inScale {
-			errs = append(errs, fmt.Sprintf("step[%d] note %s not in %s %s scale",
-				i, step.Note, spec.Theory.Key, spec.Theory.Scale))
-		}
+func validateActiveStep(spec *PatternSpec, constraints patternConstraints, index int, step StepSpec) []string {
+	if step.Note == "" {
+		return []string{fmt.Sprintf("step[%d] active but no note", index)}
 	}
 
-	if activeCount < constraints.minActive {
-		errs = append(errs, fmt.Sprintf("density too low: %d active steps, minimum %d for %s",
-			activeCount, constraints.minActive, spec.PatternType))
-	}
-	if activeCount > constraints.maxActive {
-		errs = append(errs, fmt.Sprintf("density too high: %d active steps, maximum %d for %s",
-			activeCount, constraints.maxActive, spec.PatternType))
+	midi, err := theory.NoteToMIDI(step.Note)
+	if err != nil {
+		return []string{fmt.Sprintf("step[%d] invalid note %q: %v", index, step.Note, err)}
 	}
 
-	for i, ev := range spec.Evolution {
+	var errs []string
+	if midi < constraints.minMIDI || midi > constraints.maxMIDI {
+		errs = append(errs, fmt.Sprintf("step[%d] note %s (MIDI %d) out of %s range [%d, %d]",
+			index, step.Note, midi, spec.PatternType, constraints.minMIDI, constraints.maxMIDI))
+	}
+
+	noteName := theory.NoteNameOnly(step.Note)
+	inScale, err := theory.NoteInScale(noteName, spec.Theory.Key, spec.Theory.Scale)
+	if err == nil && !inScale {
+		errs = append(errs, fmt.Sprintf("step[%d] note %s not in %s %s scale",
+			index, step.Note, spec.Theory.Key, spec.Theory.Scale))
+	}
+	return errs
+}
+
+func validateDensity(activeCount int, constraints patternConstraints, patternType string) []string {
+	switch {
+	case activeCount < constraints.minActive:
+		return []string{fmt.Sprintf("density too low: %d active steps, minimum %d for %s",
+			activeCount, constraints.minActive, patternType)}
+	case activeCount > constraints.maxActive:
+		return []string{fmt.Sprintf("density too high: %d active steps, maximum %d for %s",
+			activeCount, constraints.maxActive, patternType)}
+	default:
+		return nil
+	}
+}
+
+func validateEvolution(evolutions []EvolutionStep) []string {
+	var errs []string
+	for i, ev := range evolutions {
 		if !validEvolutionActions[ev.Action] {
 			errs = append(errs, fmt.Sprintf("evolution[%d] unknown action %q", i, ev.Action))
 		}
@@ -148,15 +182,14 @@ func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProg
 			errs = append(errs, fmt.Sprintf("evolution[%d] intensity %.2f out of [0, 1]", i, ev.Intensity))
 		}
 	}
+	return errs
+}
 
-	if prog != nil && len(prog.Chords) > 0 {
-		errs = append(errs, v.validateChordCoherence(spec, *prog)...)
+func (v *Validator) validateOptionalChordCoherence(spec *PatternSpec, prog *theory.ChordProgression) []string {
+	if prog == nil || len(prog.Chords) == 0 {
+		return nil
 	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("validation failed:\n- %s", strings.Join(errs, "\n- "))
-	}
-	return nil
+	return v.validateChordCoherence(spec, *prog)
 }
 
 // REFACTOR.md point 2: Differentiated chord coherence thresholds by pattern type
@@ -185,38 +218,46 @@ func (v *Validator) validateChordCoherence(spec *PatternSpec, prog theory.ChordP
 			end = len(spec.Motif.Steps)
 		}
 
-		activeInSection := 0
-		chordToneHits := 0
-		for j := start; j < end; j++ {
-			step := spec.Motif.Steps[j]
-			if !step.Active || step.Note == "" {
-				continue
-			}
-			activeInSection++
-			noteName := theory.NoteNameOnly(step.Note)
-			for _, ct := range chordTones {
-				if strings.EqualFold(noteName, ct) {
-					chordToneHits++
-					break
-				}
-			}
-		}
+		activeInSection, chordToneHits := chordToneStats(spec.Motif.Steps[start:end], chordTones)
 
-		// REFACTOR.md point 2: Apply pattern-type-specific threshold
 		threshold := chordCoherenceThresholds[spec.PatternType]
 		if threshold == 0 {
-			threshold = 0.5 // default fallback
+			threshold = 0.5
 		}
 
-		if activeInSection >= 3 {
+		if activeInSection >= 3 && !meetsChordThreshold(chordToneHits, activeInSection, threshold) {
 			ratio := float64(chordToneHits) / float64(activeInSection)
-			if ratio < threshold {
-				errs = append(errs, fmt.Sprintf("section %d (bars %d-%d): chord coherence %.0f%% < required %.0f%% for %s (found %d/%d chord tones of %s%s)",
-					i+1, chord.Bars[0], chord.Bars[1], ratio*100, threshold*100, spec.PatternType, chordToneHits, activeInSection, chord.Root, qualitySuffixValidator(chord.Quality)))
-			}
+			errs = append(errs, fmt.Sprintf("section %d (bars %d-%d): chord coherence %.0f%% < required %.0f%% for %s (found %d/%d chord tones of %s%s)",
+				i+1, chord.Bars[0], chord.Bars[1], ratio*100, threshold*100, spec.PatternType, chordToneHits, activeInSection, chord.Root, qualitySuffixValidator(chord.Quality)))
 		}
 	}
 	return errs
+}
+
+func chordToneStats(steps []StepSpec, chordTones []string) (active, hits int) {
+	for _, step := range steps {
+		if !step.Active || step.Note == "" {
+			continue
+		}
+		active++
+		if isChordTone(theory.NoteNameOnly(step.Note), chordTones) {
+			hits++
+		}
+	}
+	return active, hits
+}
+
+func isChordTone(noteName string, chordTones []string) bool {
+	for _, chordTone := range chordTones {
+		if strings.EqualFold(noteName, chordTone) {
+			return true
+		}
+	}
+	return false
+}
+
+func meetsChordThreshold(hits, active int, threshold float64) bool {
+	return float64(hits)/float64(active) >= threshold
 }
 
 func qualitySuffixValidator(q string) string {

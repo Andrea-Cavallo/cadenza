@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added `TODO.md` coverage plan quantifying the gap to 80% and prioritizing missing tests by package.
+
+### Changed
+- Reduced validator and dev-mode flag parsing complexity by extracting focused helper functions.
+
 ### Removed
 - **Dead code cleanup** — Removed 480+ lines of unused code identified through static analysis
   - `internal/examples/types.go` — Unused example bank types (never referenced anywhere)

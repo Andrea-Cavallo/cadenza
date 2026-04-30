@@ -119,34 +119,50 @@ func parseGenerateFlags(args []string) cliConfig {
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--bpm":
-			if i+1 < len(args) {
-				if bpm, err := strconv.ParseFloat(args[i+1], 64); err == nil {
-					cfg.BPM = bpm
-					i++
-				}
+			value, ok := flagValue(args, &i)
+			if ok {
+				setFloatFlag(value, &cfg.BPM)
 			}
 		case "--key":
-			if i+1 < len(args) {
-				cfg.Key = args[i+1]
-				i++
+			if value, ok := flagValue(args, &i); ok {
+				cfg.Key = value
 			}
 		case "--no-llm":
 			cfg.NoLLM = true
 		case "--provider":
-			if i+1 < len(args) {
-				cfg.ProviderName = args[i+1]
-				i++
+			if value, ok := flagValue(args, &i); ok {
+				cfg.ProviderName = value
 			}
 		case "--seed":
-			if i+1 < len(args) {
-				if seed, err := strconv.ParseUint(args[i+1], 10, 64); err == nil {
-					cfg.Seed = &seed
-					i++
-				}
+			value, ok := flagValue(args, &i)
+			if ok {
+				cfg.Seed = parseUintPtr(value)
 			}
 		}
 	}
 	return cfg
+}
+
+func flagValue(args []string, idx *int) (string, bool) {
+	if *idx+1 >= len(args) {
+		return "", false
+	}
+	*idx++
+	return args[*idx], true
+}
+
+func setFloatFlag(value string, target *float64) {
+	if parsed, err := strconv.ParseFloat(value, 64); err == nil {
+		*target = parsed
+	}
+}
+
+func parseUintPtr(value string) *uint64 {
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &parsed
 }
 
 func devGenerate(ctx context.Context, args []string, cacheInstance *cache.Cache) ([3]*schema.PatternSpec, theory.ChordProgression) {
@@ -257,19 +273,16 @@ func parseChordProgressionFlags(args []string) (key, seed, custom string) {
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--key":
-			if i+1 < len(args) {
-				key = args[i+1]
-				i++
+			if value, ok := flagValue(args, &i); ok {
+				key = value
 			}
 		case "--seed":
-			if i+1 < len(args) {
-				seed = args[i+1]
-				i++
+			if value, ok := flagValue(args, &i); ok {
+				seed = value
 			}
 		case "--custom":
-			if i+1 < len(args) {
-				custom = args[i+1]
-				i++
+			if value, ok := flagValue(args, &i); ok {
+				custom = value
 			}
 		}
 	}
