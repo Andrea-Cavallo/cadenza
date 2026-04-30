@@ -2,23 +2,28 @@ package renderer
 
 import "github.com/Andrea-Cavallo/cadenza/internal/renderer/styleprofile"
 
-func resolveGateTicksExt(stepIdx int, accent, ghost, slide, legato, staccato bool, profile *styleprofile.StyleProfile, tick, nextActiveTick int64) int64 {
-	if slide && nextActiveTick > tick && nextActiveTick > 0 {
+// stepFlags groups per-step articulation flags to keep function signatures compact.
+type stepFlags struct {
+	Accent, Ghost, Slide, Legato, Staccato bool
+}
+
+func resolveGateTicksExt(flags stepFlags, profile *styleprofile.StyleProfile, tick, nextActiveTick int64) int64 {
+	if flags.Slide && nextActiveTick > tick && nextActiveTick > 0 {
 		return nextActiveTick - tick + 5
 	}
 
 	var ratio float64
 
 	switch {
-	case slide && profile.Gate.SlideGate > 0:
+	case flags.Slide && profile.Gate.SlideGate > 0:
 		ratio = profile.Gate.SlideGate
-	case legato && profile.Gate.LegatoGate > 0:
+	case flags.Legato && profile.Gate.LegatoGate > 0:
 		ratio = profile.Gate.LegatoGate
-	case staccato && profile.Gate.StaccatoGate > 0:
+	case flags.Staccato && profile.Gate.StaccatoGate > 0:
 		ratio = profile.Gate.StaccatoGate
-	case ghost:
+	case flags.Ghost:
 		ratio = profile.Gate.GhostGate
-	case accent:
+	case flags.Accent:
 		ratio = profile.Gate.AccentGate
 	default:
 		ratio = profile.Gate.NormalGate

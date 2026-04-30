@@ -21,7 +21,7 @@ import (
 // generating, validating, and rendering patterns.
 // REFACTOR.md point 20
 func runDevMode() {
-	fmt.Printf("\n  %s═══ DEV MODE ═══%s\n\n", ansiMagenta+ansiBold, ansiReset)
+	fmt.Printf("\n  %sâ•â•â• DEV MODE â•â•â•%s\n\n", ansiMagenta+ansiBold, ansiReset)
 	fmt.Printf("  %sInteractive REPL for development and debugging%s\n", ansiDim, ansiReset)
 	fmt.Printf("  %sType 'help' for available commands%s\n\n", ansiDim, ansiReset)
 
@@ -35,10 +35,10 @@ func runDevMode() {
 	ctx := context.Background()
 
 	for {
-		fmt.Printf("  %scadenza [dev]%s › ", ansiMagenta+ansiBold, ansiReset)
+		fmt.Printf("  %scadenza [dev]%s â€º ", ansiMagenta+ansiBold, ansiReset)
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Printf("  %s✗  Input error: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
+			fmt.Printf("  %sâœ—  Input error: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 			break
 		}
 
@@ -55,7 +55,7 @@ func runDevMode() {
 			printDevHelp()
 
 		case "exit", "quit", "q":
-			fmt.Printf("\n  %s✕  Dev mode exited.%s\n\n", ansiDim, ansiReset)
+			fmt.Printf("\n  %sâœ•  Dev mode exited.%s\n\n", ansiDim, ansiReset)
 			return
 
 		case "generate", "gen":
@@ -83,7 +83,7 @@ func runDevMode() {
 			devDumpSpec(args, lastSpecs)
 
 		default:
-			fmt.Printf("  %s✗  Unknown command: %s%s\n", ansiRed, cmd, ansiReset)
+			fmt.Printf("  %sâœ—  Unknown command: %s%s\n", ansiRed, cmd, ansiReset)
 			fmt.Printf("  %s   Type 'help' for available commands%s\n\n", ansiDim, ansiReset)
 		}
 	}
@@ -114,16 +114,8 @@ func printDevHelp() {
 	fmt.Printf("    %sExit dev mode%s\n\n", ansiDim, ansiReset)
 }
 
-func devGenerate(ctx context.Context, args []string, cacheInstance *cache.Cache) ([3]*schema.PatternSpec, theory.ChordProgression) {
-	var cfg cliConfig
-	cfg.BPM = 122
-	cfg.Key = "Am"
-	cfg.OutputDir = "output"
-	cfg.ProviderName = "claude"
-	cfg.Model = "claude-opus-4-7"
-	cfg.Bars = 16
-
-	// Parse flags
+func parseGenerateFlags(args []string) cliConfig {
+	cfg := cliConfig{BPM: 122, Key: "Am", OutputDir: "output", ProviderName: "claude", Model: "claude-opus-4-7", Bars: 16}
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--bpm":
@@ -154,22 +146,27 @@ func devGenerate(ctx context.Context, args []string, cacheInstance *cache.Cache)
 			}
 		}
 	}
+	return cfg
+}
+
+func devGenerate(ctx context.Context, args []string, cacheInstance *cache.Cache) ([3]*schema.PatternSpec, theory.ChordProgression) {
+	cfg := parseGenerateFlags(args)
 
 	// Validate
 	if cfg.BPM < 80 || cfg.BPM > 150 {
-		fmt.Printf("  %s✗  BPM must be 80-150, got %.0f%s\n\n", ansiRed+ansiBold, cfg.BPM, ansiReset)
+		fmt.Printf("  %sâœ—  BPM must be 80-150, got %.0f%s\n\n", ansiRed+ansiBold, cfg.BPM, ansiReset)
 		return [3]*schema.PatternSpec{}, theory.ChordProgression{}
 	}
 	if _, err := theory.ParseKey(cfg.Key); err != nil {
-		fmt.Printf("  %s✗  Invalid key: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
+		fmt.Printf("  %sâœ—  Invalid key: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		return [3]*schema.PatternSpec{}, theory.ChordProgression{}
 	}
 
-	fmt.Printf("\n  %s→ Generating with BPM=%.0f, Key=%s, NoLLM=%v%s\n\n", ansiGreen, cfg.BPM, cfg.Key, cfg.NoLLM, ansiReset)
+	fmt.Printf("\n  %sâ†’ Generating with BPM=%.0f, Key=%s, NoLLM=%v%s\n\n", ansiGreen, cfg.BPM, cfg.Key, cfg.NoLLM, ansiReset)
 
 	provider, err := buildProvider(cfg.NoLLM, cfg.ProviderName, cfg.Model, cfg.OllamaURL)
 	if err != nil {
-		fmt.Printf("  %s✗  Provider init: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
+		fmt.Printf("  %sâœ—  Provider init: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		return [3]*schema.PatternSpec{}, theory.ChordProgression{}
 	}
 
@@ -201,12 +198,12 @@ func devGenerate(ctx context.Context, args []string, cacheInstance *cache.Cache)
 
 	result, err := mg.GenerateWithContext(ctx, musicCtx, cfg.Bars, 1)
 	if err != nil {
-		fmt.Printf("  %s✗  Generation failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
+		fmt.Printf("  %sâœ—  Generation failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		return [3]*schema.PatternSpec{}, prog
 	}
 
 	fmt.Println()
-	fmt.Printf("  %s✓  Generated 3 patterns successfully%s\n", ansiGreen+ansiBold, ansiReset)
+	fmt.Printf("  %sâœ“  Generated 3 patterns successfully%s\n", ansiGreen+ansiBold, ansiReset)
 	for _, f := range result.Files {
 		fmt.Printf("     %s%s%s\n", ansiDim, f, ansiReset)
 	}
@@ -217,7 +214,7 @@ func devGenerate(ctx context.Context, args []string, cacheInstance *cache.Cache)
 }
 
 func devRender(_ []string, _ [3]*schema.PatternSpec) {
-	fmt.Printf("  %s✗  render: not implemented yet%s\n", ansiRed, ansiReset)
+	fmt.Printf("  %sâœ—  render: not implemented yet%s\n", ansiRed, ansiReset)
 	fmt.Printf("     Use 'go run ./cmd/cadenza/ --bpm 122 --key Am' for full rendering\n\n")
 }
 
@@ -231,35 +228,32 @@ func devValidate(args []string, prog theory.ChordProgression) {
 	}
 
 	if specFile == "" {
-		fmt.Printf("  %s✗  Usage: validate --spec <file>%s\n\n", ansiRed, ansiReset)
+		fmt.Printf("  %sâœ—  Usage: validate --spec <file>%s\n\n", ansiRed, ansiReset)
 		return
 	}
 
 	spec, err := schema.LoadFromYAML(specFile)
 	if err != nil {
-		fmt.Printf("  %s✗  Load failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
+		fmt.Printf("  %sâœ—  Load failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		return
 	}
 
 	v := schema.NewValidator()
 	if err := v.ValidateWithChords(spec, prog); err != nil {
-		fmt.Printf("  %s✗  Validation failed:%s\n", ansiRed+ansiBold, ansiReset)
+		fmt.Printf("  %sâœ—  Validation failed:%s\n", ansiRed+ansiBold, ansiReset)
 		fmt.Printf("     %s%v%s\n\n", ansiDim, err, ansiReset)
 	} else {
-		fmt.Printf("  %s✓  Validation passed%s\n\n", ansiGreen+ansiBold, ansiReset)
+		fmt.Printf("  %sâœ“  Validation passed%s\n\n", ansiGreen+ansiBold, ansiReset)
 	}
 }
 
 func devInspect(_ []string, _ [3]*schema.PatternSpec) {
-	fmt.Printf("  %s✗  inspect: not implemented yet%s\n", ansiRed, ansiReset)
+	fmt.Printf("  %sâœ—  inspect: not implemented yet%s\n", ansiRed, ansiReset)
 	fmt.Printf("     Use '--dump-spec' flag to export specs for inspection\n\n")
 }
 
-func devChordProgression(args []string) theory.ChordProgression {
-	key := "Am"
-	seed := "dev-seed"
-	var custom string
-
+func parseChordProgressionFlags(args []string) (key, seed, custom string) {
+	key, seed = "Am", "dev-seed"
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--key":
@@ -279,10 +273,15 @@ func devChordProgression(args []string) theory.ChordProgression {
 			}
 		}
 	}
+	return
+}
+
+func devChordProgression(args []string) theory.ChordProgression {
+	key, seed, custom := parseChordProgressionFlags(args)
 
 	parsedKey, err := theory.ParseKey(key)
 	if err != nil {
-		fmt.Printf("  %s✗  Invalid key: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
+		fmt.Printf("  %sâœ—  Invalid key: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		return theory.ChordProgression{}
 	}
 
@@ -290,7 +289,7 @@ func devChordProgression(args []string) theory.ChordProgression {
 	if custom != "" {
 		prog, err = parseCustomProgression(custom, key, 16)
 		if err != nil {
-			fmt.Printf("  %s✗  Custom progression parse failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
+			fmt.Printf("  %sâœ—  Custom progression parse failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 			return theory.ChordProgression{}
 		}
 	} else {
@@ -314,7 +313,7 @@ func devChordProgression(args []string) theory.ChordProgression {
 
 func devCacheInfo(cacheInstance *cache.Cache) {
 	if cacheInstance == nil {
-		fmt.Printf("  %s✗  Cache not initialized%s\n\n", ansiRed, ansiReset)
+		fmt.Printf("  %sâœ—  Cache not initialized%s\n\n", ansiRed, ansiReset)
 		return
 	}
 
@@ -334,11 +333,11 @@ func devCacheInfo(cacheInstance *cache.Cache) {
 }
 
 func devFromSpec(_ []string, _ *[3]*schema.PatternSpec) {
-	fmt.Printf("  %s✗  from-spec: not implemented yet%s\n", ansiRed, ansiReset)
+	fmt.Printf("  %sâœ—  from-spec: not implemented yet%s\n", ansiRed, ansiReset)
 	fmt.Printf("     Use '--from-spec <file>' flag in normal mode\n\n")
 }
 
 func devDumpSpec(_ []string, _ [3]*schema.PatternSpec) {
-	fmt.Printf("  %s✗  dump-spec: not implemented yet%s\n", ansiRed, ansiReset)
+	fmt.Printf("  %sâœ—  dump-spec: not implemented yet%s\n", ansiRed, ansiReset)
 	fmt.Printf("     Use '--dump-spec' flag in normal mode\n\n")
 }

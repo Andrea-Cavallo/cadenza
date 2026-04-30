@@ -19,6 +19,33 @@ var sweepPhaseOffsets = map[string]float64{
 	"melody":   0.5,
 }
 
+// computeSweepProgress computes the normalised [0,1] progress within the current cycle.
+func computeSweepProgress(bar, step, cycleBars, resolution int, phaseOffset float64) float64 {
+	cycleBar := bar % cycleBars
+	base := (float64(cycleBar*resolution+step) + phaseOffset*float64(cycleBars*resolution)) / float64(cycleBars*resolution)
+	p := math.Mod(base, 1.0)
+	if p < 0 {
+		p += 1.0
+	}
+	return p
+}
+
+// computeSweepValue computes the raw CC74 value for the given progress and sweep style.
+func computeSweepValue(sweepStyle string, progress float64, minVal, maxVal float64, cycleCount int, profile *styleprofile.StyleProfile) float64 {
+	if sweepStyle == "dramatic" {
+		if cycleCount%2 == 0 {
+			// First cycle: up-down
+			if progress < 0.5 {
+				return minVal + (maxVal-minVal)*applyCurve(progress*2, profile.FilterSweep.Curve)
+			}
+			return maxVal - (maxVal-minVal)*applyCurve((progress-0.5)*2, profile.FilterSweep.Curve)
+		}
+		// Second cycle: up to peak
+		return minVal + (maxVal-minVal)*applyCurve(progress, profile.FilterSweep.Curve)
+	}
+	return minVal + (maxVal-minVal)*applyCurve(progress, profile.FilterSweep.Curve)
+}
+
 func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed, patternType string, profile *styleprofile.StyleProfile, evolutions []schema.EvolutionStep) []midi.MIDIEvent {
 	if profile.FilterSweep.Resolution == 0 {
 		return nil
@@ -60,36 +87,9 @@ func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed, patternTyp
 
 	events := make([]midi.MIDIEvent, 0, resolution)
 	for step := 0; step < resolution; step++ {
-		// Multi-cycle: calculate progress within the current cycle
-		cycleBar := bar % cycleBars
-		baseProgress := (float64(cycleBar*resolution+step) + phaseOffset*float64(cycleBars*resolution)) / float64(cycleBars*resolution)
-		// Wrap progress to [0, 1] range
-		progress := math.Mod(baseProgress, 1.0)
-		if progress < 0 {
-			progress += 1.0
-		}
-
-		// Dramatic mode: double sweep with up-down-up pattern
-		var value float64
-		if sweepStyle == "dramatic" {
-			// Two complete cycles per 8 bars: first 4 bars = up-down, second 4 bars = up-peak
-			cycleCount := bar / cycleBars
-			if cycleCount%2 == 0 {
-				// First cycle: up-down
-				if progress < 0.5 {
-					p := progress * 2
-					value = minVal + (maxVal-minVal)*applyCurve(p, profile.FilterSweep.Curve)
-				} else {
-					p := (progress - 0.5) * 2
-					value = maxVal - (maxVal-minVal)*applyCurve(p, profile.FilterSweep.Curve)
-				}
-			} else {
-				// Second cycle: up to peak
-				value = minVal + (maxVal-minVal)*applyCurve(progress, profile.FilterSweep.Curve)
-			}
-		} else {
-			value = minVal + (maxVal-minVal)*applyCurve(progress, profile.FilterSweep.Curve)
-		}
+		progress := computeSweepProgress(bar, step, cycleBars, resolution, phaseOffset)
+		cycleCount := bar / cycleBars
+		value := computeSweepValue(sweepStyle, progress, minVal, maxVal, cycleCount, profile)
 
 		if jitter > 0 {
 			value += float64(deterministicJitter(variationSeed, bar, step, jitter))
