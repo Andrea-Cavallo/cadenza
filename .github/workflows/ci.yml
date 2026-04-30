@@ -2,16 +2,22 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop, feature/**]
   pull_request:
-    branches: [main]
+    branches: [master, main]
 
 jobs:
+  # ──────────────────────────────────────────────
+  # 1. Test + Coverage
+  # ──────────────────────────────────────────────
   test:
+    name: Test & Coverage
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history required by SonarCloud
 
       - uses: actions/setup-go@v5
         with:
@@ -24,17 +30,60 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test
+      - name: Test (race + coverage)
         run: go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic
 
       - name: Coverage report
         run: go tool cover -func=coverage.out
 
       - name: Build
-        run: go build -o /dev/null ./cmd/cadenza/
+        run: CGO_ENABLED=0 go build -o /dev/null ./cmd/cadenza/
 
+      - name: Cross-compile check (linux)
+        run: GOOS=linux CGO_ENABLED=0 go build -o /dev/null ./cmd/cadenza/
+
+      # Upload coverage for SonarCloud job
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 1
+
+  # ──────────────────────────────────────────────
+  # 2. Lint
+  # ──────────────────────────────────────────────
   lint:
+    name: Lint
     runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Go must be set up BEFORE installing golangci-lint so that
+      # "go install" compiles golangci-lint with the project's Go version.
+      # Using the pre-built binary from golangci-lint-action would download
+      # a binary compiled with an older Go toolchain, causing:
+      #   "can't load config: the Go language version used to build
+      #    golangci-lint is lower than the targeted Go version"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run golangci-lint
+        run: golangci-lint run ./...
+
+  # ──────────────────────────────────────────────
+  # 3. Security — vulnerability scan
+  # ──────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -43,24 +92,55 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  # ──────────────────────────────────────────────
+  # 4. SonarCloud analysis
+  # ──────────────────────────────────────────────
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history required for blame annotations
+
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ──────────────────────────────────────────────
+  # 5. Docker image — only after test + lint pass
+  # ──────────────────────────────────────────────
   docker:
+    name: Docker Build & Smoke Test
     runs-on: ubuntu-latest
     needs: [test, lint]
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t cadenza:test .
+        run: docker build -t cadenza:ci .
 
-      - name: Test Docker image (offline mode)
+      - name: Smoke test (offline mode — must produce 3 MIDI files)
         run: |
           mkdir -p output
-          docker run --rm -v $(pwd)/output:/app/output cadenza:test \
+          docker run --rm -v $(pwd)/output:/app/output cadenza:ci \
             --bpm 122 --key Am --no-llm
           count=$(ls output/*.mid 2>/dev/null | wc -l)
           [ "$count" -eq 3 ] || (echo "Expected 3 MIDI files, got $count" && exit 1)
+          echo "Docker smoke test passed: $count MIDI files generated"
