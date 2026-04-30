@@ -36,6 +36,17 @@ type cliConfig struct {
 	NoLLM        bool
 	ProviderName string
 	Model        string
+	OllamaURL    string
+	Seed         *uint64 // nil = random
+	SingleFile   bool
+	Bars         int
+	Progression  string // custom chord progression, e.g. "Am-F-C-G"
+	Drums        bool
+	Variations   int
+	Groove       string
+	DumpSpec     string // directory to dump PatternSpec YAML
+	FromSpec     string // path to PatternSpec file to re-render
+	DryRun       bool   // REFACTOR.md point 19: execute without writing files
 }
 
 var stdinReader = bufio.NewReader(os.Stdin)
@@ -281,7 +292,11 @@ func printSummary(cfg cliConfig) {
 // collected config. Returns ok=false when the user cancels or aborts.
 // The banner is printed once by main before the first call.
 func runInteractiveCLI() (cliConfig, bool) {
-	cfg := cliConfig{}
+	cfg := cliConfig{
+		Bars:       16,
+		Variations: 1,
+		Groove:     "straight",
+	}
 
 	if !selectMode(&cfg) {
 		return cfg, false
@@ -310,7 +325,7 @@ func runInteractiveCLI() (cliConfig, bool) {
 			fmt.Println()
 			return cfg, true
 		case "n", "no":
-			fmt.Printf("\n  %s✕  Session cancelled.%s\n\n", ansiDim, ansiReset)
+			fmt.Printf("\n  %s✕  Session canceled.%s\n\n", ansiDim, ansiReset)
 			return cfg, false
 		default:
 			fmt.Printf("  %s→ y or n%s\n", ansiRed, ansiReset)

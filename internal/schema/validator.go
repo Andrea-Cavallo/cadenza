@@ -21,12 +21,9 @@ var constraintsByType = map[string]patternConstraints{
 }
 
 var validStyleProfiles = map[string]bool{
-	"bass_progressive": true, "bass_techno_driving": true,
-	"bass_melodic_dark": true, "bass_deep": true,
-	"arp_flowing": true, "arp_rhythmic": true,
-	"arp_ambient": true, "arp_plucky": true,
-	"melody_expressive": true, "melody_minimal": true,
-	"melody_soaring": true, "melody_rhythmic": true,
+	"bass_progressive": true, "bass_driving": true, "bass_sub": true,
+	"arp_flowing": true, "arp_epic": true, "arp_staccato": true,
+	"melody_expressive": true, "melody_hypnotic": true,
 }
 
 var validEvolutionActions = map[string]bool{
@@ -36,10 +33,21 @@ var validEvolutionActions = map[string]bool{
 	"add_chord_note": true, "strip_to_root": true, "ornament": true,
 }
 
-type Validator struct{}
+// Validator enforces musical rules (scale, range, density, chord coherence) on PatternSpec.
+type Validator struct {
+	allowedProfiles map[string]bool
+}
 
 func NewValidator() *Validator {
-	return &Validator{}
+	return &Validator{allowedProfiles: validStyleProfiles}
+}
+
+func NewValidatorWithProfiles(profiles []string) *Validator {
+	m := make(map[string]bool, len(profiles))
+	for _, p := range profiles {
+		m[p] = true
+	}
+	return &Validator{allowedProfiles: m}
 }
 
 func (v *Validator) Validate(spec *PatternSpec) error {
@@ -50,15 +58,36 @@ func (v *Validator) ValidateWithChords(spec *PatternSpec, prog theory.ChordProgr
 	return v.validate(spec, &prog)
 }
 
+// ValidateWithBars validates a spec with custom bar count (for --bars flag)
+func (v *Validator) ValidateWithBars(spec *PatternSpec, bars int) error {
+	return v.validateCustomBars(spec, nil, bars)
+}
+
+// ValidateWithChordsAndBars validates with both chord progression and custom bar count
+func (v *Validator) ValidateWithChordsAndBars(spec *PatternSpec, prog theory.ChordProgression, bars int) error {
+	return v.validateCustomBars(spec, &prog, bars)
+}
+
 func (v *Validator) validate(spec *PatternSpec, prog *theory.ChordProgression) error {
+	return v.validateCustomBars(spec, prog, 0)
+}
+
+func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProgression, customBars int) error {
 	var errs []string
 
 	if spec.Meta.BPM < 80 || spec.Meta.BPM > 150 {
 		errs = append(errs, fmt.Sprintf("bpm %.1f out of range [80, 150]", spec.Meta.BPM))
 	}
 
-	if spec.Meta.Bars != 16 {
-		errs = append(errs, fmt.Sprintf("bars must be 16, got %d", spec.Meta.Bars))
+	// Validate bars is a power of 2 between 16 and 128
+	validBars := map[int]bool{16: true, 32: true, 64: true, 128: true}
+	if !validBars[spec.Meta.Bars] {
+		errs = append(errs, fmt.Sprintf("bars must be 16, 32, 64, or 128, got %d", spec.Meta.Bars))
+	}
+
+	// If customBars is specified, verify it matches
+	if customBars > 0 && spec.Meta.Bars != customBars {
+		errs = append(errs, fmt.Sprintf("bars mismatch: spec has %d, expected %d", spec.Meta.Bars, customBars))
 	}
 
 	constraints, ok := constraintsByType[spec.PatternType]
@@ -67,7 +96,7 @@ func (v *Validator) validate(spec *PatternSpec, prog *theory.ChordProgression) e
 		return fmt.Errorf("validation failed:\n- %s", strings.Join(errs, "\n- "))
 	}
 
-	if !validStyleProfiles[spec.StyleProfile] {
+	if !v.allowedProfiles[spec.StyleProfile] {
 		errs = append(errs, fmt.Sprintf("unknown style_profile %q", spec.StyleProfile))
 	}
 
@@ -130,6 +159,16 @@ func (v *Validator) validate(spec *PatternSpec, prog *theory.ChordProgression) e
 	return nil
 }
 
+// REFACTOR.md point 2: Differentiated chord coherence thresholds by pattern type
+// - bassline: 75% (bass is harmonic anchor)
+// - arpeggio: 80% (literally an arpeggio of chord notes)
+// - melody: 30% (legitimate use of passing tones)
+var chordCoherenceThresholds = map[string]float64{
+	"bassline": 0.75,
+	"arpeggio": 0.80,
+	"melody":   0.30,
+}
+
 func (v *Validator) validateChordCoherence(spec *PatternSpec, prog theory.ChordProgression) []string {
 	var errs []string
 	stepsPerSection := len(spec.Motif.Steps) / len(prog.Chords)
@@ -163,9 +202,18 @@ func (v *Validator) validateChordCoherence(spec *PatternSpec, prog theory.ChordP
 			}
 		}
 
-		if activeInSection >= 3 && chordToneHits == 0 {
-			errs = append(errs, fmt.Sprintf("section %d (bars %d-%d): no chord tones of %s%s found in %d active notes",
-				i+1, chord.Bars[0], chord.Bars[1], chord.Root, qualitySuffixValidator(chord.Quality), activeInSection))
+		// REFACTOR.md point 2: Apply pattern-type-specific threshold
+		threshold := chordCoherenceThresholds[spec.PatternType]
+		if threshold == 0 {
+			threshold = 0.5 // default fallback
+		}
+
+		if activeInSection >= 3 {
+			ratio := float64(chordToneHits) / float64(activeInSection)
+			if ratio < threshold {
+				errs = append(errs, fmt.Sprintf("section %d (bars %d-%d): chord coherence %.0f%% < required %.0f%% for %s (found %d/%d chord tones of %s%s)",
+					i+1, chord.Bars[0], chord.Bars[1], ratio*100, threshold*100, spec.PatternType, chordToneHits, activeInSection, chord.Root, qualitySuffixValidator(chord.Quality)))
+			}
 		}
 	}
 	return errs
@@ -183,4 +231,3 @@ func qualitySuffixValidator(q string) string {
 		return ""
 	}
 }
-

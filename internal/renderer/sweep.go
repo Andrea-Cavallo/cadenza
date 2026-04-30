@@ -12,7 +12,14 @@ import (
 
 const ccFilterCutoff = uint8(74)
 
-func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed string, profile *styleprofile.StyleProfile, evolutions []schema.EvolutionStep) []midi.MIDIEvent {
+// REFACTOR.md point 5: Pattern-type-specific phase offsets to prevent simultaneous sweep peaks
+var sweepPhaseOffsets = map[string]float64{
+	"bassline": 0.0,
+	"arpeggio": 0.25,
+	"melody":   0.5,
+}
+
+func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed, patternType string, profile *styleprofile.StyleProfile, evolutions []schema.EvolutionStep) []midi.MIDIEvent {
 	if profile.FilterSweep.Resolution == 0 {
 		return nil
 	}
@@ -33,21 +40,55 @@ func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed string, pro
 	resolution := profile.FilterSweep.Resolution
 	jitter := profile.FilterSweep.Jitter
 
+	// REFACTOR.md point 4: Multi-cycle filter sweep (4 bars cycle for dramatic, 16 for others)
+	cycleBars := 4
+	if sweepStyle == "dramatic" {
+		cycleBars = 4 // dramatic mode: 2 complete sweeps over 16 bars (up-down-up-peak)
+	} else if sweepStyle == "medium" || sweepStyle == "subtle" {
+		cycleBars = 4 // medium/subtle: 4-bar cycle
+	}
+
+	// REFACTOR.md point 5: Apply pattern-type-specific phase offset
+	phaseOffset := sweepPhaseOffsets[patternType]
+	if phaseOffset == 0 && patternType != "bassline" {
+		// Default fallback if pattern type not in map
+		phaseOffset = 0.0
+	}
+
 	barStartTick := int64(bar * 16 * ticksPerStep)
 	stepTicks := int64(16*ticksPerStep) / int64(resolution)
 
 	events := make([]midi.MIDIEvent, 0, resolution)
 	for step := 0; step < resolution; step++ {
-		progress := float64(bar*resolution+step) / float64(totalBars*resolution)
+		// Multi-cycle: calculate progress within the current cycle
+		cycleBar := bar % cycleBars
+		baseProgress := (float64(cycleBar*resolution+step) + phaseOffset*float64(cycleBars*resolution)) / float64(cycleBars*resolution)
+		// Wrap progress to [0, 1] range
+		progress := math.Mod(baseProgress, 1.0)
+		if progress < 0 {
+			progress += 1.0
+		}
 
+		// Dramatic mode: double sweep with up-down-up pattern
 		var value float64
-		switch profile.FilterSweep.Curve {
-		case "s_curve":
-			value = minVal + (maxVal-minVal)*sCurve(progress)
-		case "exponential":
-			value = minVal + (maxVal-minVal)*math.Pow(progress, 2.0)
-		default:
-			value = minVal + (maxVal-minVal)*progress
+		if sweepStyle == "dramatic" {
+			// Two complete cycles per 8 bars: first 4 bars = up-down, second 4 bars = up-peak
+			cycleCount := bar / cycleBars
+			if cycleCount%2 == 0 {
+				// First cycle: up-down
+				if progress < 0.5 {
+					p := progress * 2
+					value = minVal + (maxVal-minVal)*applyCurve(p, profile.FilterSweep.Curve)
+				} else {
+					p := (progress - 0.5) * 2
+					value = maxVal - (maxVal-minVal)*applyCurve(p, profile.FilterSweep.Curve)
+				}
+			} else {
+				// Second cycle: up to peak
+				value = minVal + (maxVal-minVal)*applyCurve(progress, profile.FilterSweep.Curve)
+			}
+		} else {
+			value = minVal + (maxVal-minVal)*applyCurve(progress, profile.FilterSweep.Curve)
 		}
 
 		if jitter > 0 {
@@ -73,6 +114,18 @@ func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed string, pro
 	}
 
 	return events
+}
+
+// applyCurve applies the specified curve function to a progress value [0, 1].
+func applyCurve(progress float64, curve string) float64 {
+	switch curve {
+	case "s_curve":
+		return sCurve(progress)
+	case "exponential":
+		return math.Pow(progress, 2.0)
+	default:
+		return progress
+	}
 }
 
 func evolutionIntensityForBar(bar int, evolutions []schema.EvolutionStep) float64 {

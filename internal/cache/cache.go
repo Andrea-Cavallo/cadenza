@@ -5,16 +5,26 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
+
+	"github.com/Andrea-Cavallo/cadenza/internal/metrics"
 )
 
 const defaultTTL = 30 * 24 * time.Hour
 
+// Cache is a SHA256-keyed disk cache with configurable TTL for LLM responses.
 type Cache struct {
-	dir string
-	ttl time.Duration
+	dir   string
+	ttl   time.Duration
+	stats struct {
+		sync.Mutex
+		hits   int
+		misses int
+	}
 }
 
 type entry struct {
@@ -22,8 +32,12 @@ type entry struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func New(dir string) *Cache {
-	return &Cache{dir: dir, ttl: defaultTTL}
+func New(ttlDays int, dir string) *Cache {
+	ttl := time.Duration(ttlDays) * 24 * time.Hour
+	if ttlDays <= 0 {
+		ttl = defaultTTL
+	}
+	return &Cache{dir: dir, ttl: ttl}
 }
 
 func (c *Cache) key(parts ...string) string {
@@ -35,23 +49,39 @@ func (c *Cache) key(parts ...string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+func (c *Cache) recordMiss() {
+	c.stats.Lock()
+	c.stats.misses++
+	c.stats.Unlock()
+	metrics.CacheMisses.Add(1)
+}
+
 func (c *Cache) Get(keys ...string) ([]byte, bool) {
 	path := filepath.Join(c.dir, c.key(keys...)+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
+		c.recordMiss()
 		return nil, false
 	}
 
 	var e entry
 	if err := json.Unmarshal(data, &e); err != nil {
+		c.recordMiss()
 		return nil, false
 	}
 
 	if time.Since(e.CreatedAt) > c.ttl {
-		_ = os.Remove(path)
+		if err := os.Remove(path); err != nil {
+			slog.Warn("cache: failed to remove expired entry", "path", path, "error", err)
+		}
+		c.recordMiss()
 		return nil, false
 	}
 
+	c.stats.Lock()
+	c.stats.hits++
+	c.stats.Unlock()
+	metrics.CacheHits.Add(1)
 	return e.Data, true
 }
 
@@ -68,4 +98,23 @@ func (c *Cache) Set(data []byte, keys ...string) error {
 
 	path := filepath.Join(c.dir, c.key(keys...)+".json")
 	return os.WriteFile(path, b, 0o644)
+}
+
+// Stats returns cache statistics for dev mode inspection.
+// REFACTOR.md point 20
+func (c *Cache) Stats() map[string]interface{} {
+	c.stats.Lock()
+	defer c.stats.Unlock()
+
+	// Count cache files
+	var keys int
+	if entries, err := os.ReadDir(c.dir); err == nil {
+		keys = len(entries)
+	}
+
+	return map[string]interface{}{
+		"hits":   c.stats.hits,
+		"misses": c.stats.misses,
+		"keys":   keys,
+	}
 }

@@ -29,6 +29,9 @@ jobs:
           - goos: windows
             goarch: amd64
             suffix: windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            suffix: windows-arm64.exe
 
     steps:
       - uses: actions/checkout@v4

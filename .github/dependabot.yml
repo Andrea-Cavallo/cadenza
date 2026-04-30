@@ -1,10 +1,10 @@
 version: 2
 
 updates:
-  # ── GitHub Actions ─────────────────────────────────────────────────────────
-  # Dependabot will open PRs that replace tag refs (e.g. @v4) with full SHA
-  # hashes and keep them updated. This satisfies the OSSF Scorecard
-  # "Pinned-Dependencies" check without requiring manual SHA management.
+  # ── GitHub Actions ──────────────────────────────────────────────────────────
+  # Dependabot replaces version tags (e.g. @v4) with full commit SHA hashes
+  # and keeps them updated. This resolves the OSSF Scorecard
+  # "Pinned-Dependencies" warning automatically — no manual SHA management.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -19,7 +19,7 @@ updates:
         patterns:
           - "*"
 
-  # ── Go modules ─────────────────────────────────────────────────────────────
+  # ── Go modules ──────────────────────────────────────────────────────────────
   - package-ecosystem: gomod
     directory: /
     schedule:

@@ -2,6 +2,8 @@ package generator
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -15,14 +17,17 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
+// MusicContext carries all musical parameters for a generation pass.
 type MusicContext struct {
 	BPM              float64
 	Key              theory.Key
 	Bars             int
 	VariationSeed    string
 	ChordProgression theory.ChordProgression
+	Groove           string // timing preset: straight, mpc60, linndrum, humanize
 }
 
+// SingleGenerator handles one pattern type generation via LLM with caching.
 type SingleGenerator struct {
 	provider  llm.Provider
 	validator *schema.Validator
@@ -52,7 +57,15 @@ Rules:
 - Return ONLY valid JSON, no markdown, no explanation`
 
 func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, patternType string) (*schema.PatternSpec, error) {
-	cacheKeys := []string{g.provider.Name(), patternType, musicCtx.Key.Root, musicCtx.Key.Mode, musicCtx.VariationSeed}
+	promptPath := filepath.Join(g.promptDir, patternType+"_v1.md")
+	promptTemplate, err := os.ReadFile(promptPath)
+	if err != nil {
+		return nil, fmt.Errorf("read prompt %q: %w", promptPath, err)
+	}
+
+	// REFACTOR.md point 6: Include prompt template hash in cache key for invalidation on prompt changes
+	promptHash := hashContent(promptTemplate)
+	cacheKeys := []string{g.provider.Name(), patternType, musicCtx.Key.Root, musicCtx.Key.Mode, musicCtx.VariationSeed, promptHash}
 
 	if g.cache != nil {
 		if cached, ok := g.cache.Get(cacheKeys...); ok {
@@ -64,14 +77,14 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 		}
 	}
 
-	promptPath := filepath.Join(g.promptDir, patternType+"_v1.md")
-	promptTemplate, err := os.ReadFile(promptPath)
-	if err != nil {
-		return nil, fmt.Errorf("read prompt %q: %w", promptPath, err)
-	}
-
 	chordStr := progressionStringDetailed(musicCtx.ChordProgression)
 	schemaExample := exampleSpecJSON(patternType)
+
+	// REFACTOR.md point 1: Generate proper schema using invopop/jsonschema instead of manual inference
+	schemaProps, schemaRequired, err := schema.GenerateJSONSchema()
+	if err != nil {
+		slog.Warn("failed to generate json schema, falling back to example inference", "error", err)
+	}
 
 	prompt := strings.ReplaceAll(string(promptTemplate), "{{KEY}}", musicCtx.Key.Root)
 	prompt = strings.ReplaceAll(prompt, "{{MODE}}", musicCtx.Key.Mode)
@@ -82,11 +95,13 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 	prompt = strings.ReplaceAll(prompt, "{{SCHEMA}}", schemaExample)
 
 	req := llm.GenerateRequest{
-		System:       systemPrompt,
-		Messages:     []llm.Message{{Role: "user", Content: prompt}},
-		OutputSchema: []byte(schemaExample),
-		Temperature:  0.3,
-		MaxTokens:    4096,
+		System:           systemPrompt,
+		Messages:         []llm.Message{{Role: "user", Content: prompt}},
+		OutputSchema:     []byte(schemaExample),
+		SchemaProperties: schemaProps,    // REFACTOR.md point 1: Pass pre-generated schema
+		SchemaRequired:   schemaRequired, // REFACTOR.md point 1: Pass required fields
+		Temperature:      0.3,
+		MaxTokens:        4096,
 	}
 
 	validate := func(raw []byte) error {
@@ -103,7 +118,9 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 	}
 
 	if g.cache != nil {
-		_ = g.cache.Set(rawJSON, cacheKeys...)
+		if err := g.cache.Set(rawJSON, cacheKeys...); err != nil {
+			slog.Warn("cache write failed", "error", err)
+		}
 	}
 
 	var spec schema.PatternSpec
@@ -115,10 +132,10 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 
 func exampleSpecJSON(patternType string) string {
 	example := schema.PatternSpec{
-		SpecVersion: "1.0",
-		PatternType: patternType,
-		Meta:        schema.PatternMeta{Name: "example", BPM: 122, Key: "Am", Bars: 16, Description: "example pattern"},
-		Theory:      schema.TheorySpec{Key: "A", Mode: "minor", Scale: "minor_natural", OctaveRange: [2]int{2, 3}},
+		SpecVersion:  "1.0",
+		PatternType:  patternType,
+		Meta:         schema.PatternMeta{Name: "example", BPM: 122, Key: "Am", Bars: 16, Description: "example pattern"},
+		Theory:       schema.TheorySpec{Key: "A", Mode: "minor", Scale: "minor_natural", OctaveRange: [2]int{2, 3}},
 		StyleProfile: "bass_progressive",
 		Motif: schema.MotifSpec{
 			Length: 16,
@@ -145,7 +162,7 @@ func progressionString(prog theory.ChordProgression) string {
 	}
 	parts := make([]string, len(prog.Chords))
 	for i, c := range prog.Chords {
-		parts[i] = fmt.Sprintf("%s%s", c.Root, qualitySuffix(c.Quality))
+		parts[i] = fmt.Sprintf("%s%s", c.Root, theory.QualitySuffix(c.Quality))
 	}
 	return strings.Join(parts, " → ")
 }
@@ -159,20 +176,15 @@ func progressionStringDetailed(prog theory.ChordProgression) string {
 		notes, _ := theory.ChordNotes(c.Root, c.Quality)
 		notesStr := strings.Join(notes, ", ")
 		parts[i] = fmt.Sprintf("bars %d-%d: %s%s (notes: %s)",
-			c.Bars[0], c.Bars[1], c.Root, qualitySuffix(c.Quality), notesStr)
+			c.Bars[0], c.Bars[1], c.Root, theory.QualitySuffix(c.Quality), notesStr)
 	}
 	return strings.Join(parts, "\n")
 }
 
-func qualitySuffix(q string) string {
-	switch q {
-	case "minor":
-		return "m"
-	case "dim":
-		return "dim"
-	case "aug":
-		return "aug"
-	default:
-		return ""
-	}
+
+// hashContent computes SHA-256 hash of content for cache key generation.
+// REFACTOR.md point 6: Used to invalidate cache when prompt templates change.
+func hashContent(content []byte) string {
+	h := sha256.Sum256(content)
+	return hex.EncodeToString(h[:8]) // Use first 8 bytes for brevity
 }

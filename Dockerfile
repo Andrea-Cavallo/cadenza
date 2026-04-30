@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 
@@ -11,12 +11,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/cadenza ./cmd/cad
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates && \
+    adduser -D -g '' cadenza
+
 COPY --from=builder /bin/cadenza /usr/local/bin/cadenza
 COPY prompts/ /app/prompts/
 
 WORKDIR /app
-RUN mkdir -p /app/output
+RUN mkdir -p /app/output && chown cadenza:cadenza /app/output
+
+USER cadenza
 
 ENTRYPOINT ["cadenza"]
 CMD ["--bpm", "122", "--key", "Am", "--no-llm"]

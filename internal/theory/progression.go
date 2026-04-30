@@ -5,12 +5,14 @@ import (
 	"encoding/binary"
 )
 
+// ChordProgression is the harmonic contract shared by all pattern generators.
 type ChordProgression struct {
 	Chords []ProgressionChord `json:"chords"`
 	Key    string             `json:"key"`
 	Mode   string             `json:"mode"`
 }
 
+// ProgressionChord represents a single chord within a progression, spanning a bar range.
 type ProgressionChord struct {
 	Root    string   `json:"root"`
 	Quality string   `json:"quality"`
@@ -36,8 +38,8 @@ var majorProgressions = []progressionTemplate{
 	{degrees: []int{0, 2, 3, 4}}, // I → iii → IV → V
 }
 
-func ProgressionPool(root, scaleType string) []ChordProgression {
-	diatonic, err := ChordsInKey(root, scaleType)
+func progressionPool(root, scaleType string) []ChordProgression {
+	diatonic, err := chordsInKey(root, scaleType)
 	if err != nil {
 		return nil
 	}
@@ -71,7 +73,7 @@ func ProgressionPool(root, scaleType string) []ChordProgression {
 }
 
 func SelectProgression(root, scaleType, seed string) ChordProgression {
-	pool := ProgressionPool(root, scaleType)
+	pool := progressionPool(root, scaleType)
 	if len(pool) == 0 {
 		return ChordProgression{Key: root, Mode: "minor"}
 	}

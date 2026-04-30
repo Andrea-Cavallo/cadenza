@@ -57,10 +57,15 @@ func buildBarSteps(steps []schema.StepSpec, bar int, evolutions []schema.Evoluti
 			}
 			deactivateSteps(result, current-targetActive)
 		case "build":
-			// full motif, no density change
+			// REFACTOR.md point 5: build adds fill notes (ghost notes on off-beat)
+			addFillNotes(result, int(ev.Intensity*3))
 		case "peak":
+			// REFACTOR.md point 5: peak adds octave-up on selected notes + velocity push (handled by velocity scale)
 			activateSteps(result, 2)
+			applyOctaveShift(result, 1, 0.3) // 30% of notes go up an octave
 		case "release":
+			// REFACTOR.md point 5: release removes fills, returns to base motif with fewer accents
+			removeFillNotes(result)
 			targetActive := int(float64(countActive(result)) * 0.8)
 			deactivateSteps(result, countActive(result)-targetActive)
 		case "density_up":
@@ -72,7 +77,57 @@ func buildBarSteps(steps []schema.StepSpec, bar int, evolutions []schema.Evoluti
 		}
 	}
 
+	// REFACTOR.md point 5: Bar-to-bar variation — mutate 1-2 steps every 4 bars
+	if bar > 0 && bar%4 == 0 {
+		mutateMotif(result, 1+(bar/4)%2) // mutate 1-2 steps
+	}
+
 	return result
+}
+
+// addFillNotes adds ghost notes on off-beat positions for build sections.
+func addFillNotes(steps []schema.StepSpec, count int) {
+	if count <= 0 {
+		return
+	}
+	added := 0
+	// Add ghost notes on off-beat positions (odd indices)
+	for i := 1; i < len(steps) && added < count; i += 2 {
+		if !steps[i].Active && steps[i].Note != "" {
+			steps[i].Active = true
+			steps[i].Ghost = true
+			added++
+		}
+	}
+}
+
+// removeFillNotes removes ghost notes added during build.
+func removeFillNotes(steps []schema.StepSpec) {
+	for i := range steps {
+		if steps[i].Ghost && i%2 == 1 {
+			steps[i].Active = false
+		}
+	}
+}
+
+// mutateMotif introduces small variations to the motif by changing 1-2 steps.
+func mutateMotif(steps []schema.StepSpec, count int) {
+	if count <= 0 {
+		return
+	}
+	mutated := 0
+	// Mutate non-downbeat active steps
+	for i := 2; i < len(steps) && mutated < count; i += 4 {
+		if steps[i].Active && !steps[i].Accent {
+			// Toggle activity or add/remove ghost flag
+			if steps[i].Ghost {
+				steps[i].Ghost = false
+			} else {
+				steps[i].Ghost = true
+			}
+			mutated++
+		}
+	}
 }
 
 func applyOctaveShift(steps []schema.StepSpec, delta int, fraction float64) {

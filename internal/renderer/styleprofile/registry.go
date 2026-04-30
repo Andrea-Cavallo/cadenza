@@ -2,6 +2,7 @@ package styleprofile
 
 import "fmt"
 
+// Registry is the source of truth for available style profiles, keyed by name.
 type Registry struct {
 	profiles map[string]*StyleProfile
 }
@@ -9,8 +10,13 @@ type Registry struct {
 func NewRegistry() *Registry {
 	r := &Registry{profiles: make(map[string]*StyleProfile)}
 	r.Register(&BassProgressive)
+	r.Register(&BassDriving)
+	r.Register(&BassSub)
 	r.Register(&ArpFlowing)
+	r.Register(&ArpEpic)
+	r.Register(&ArpStaccato)
 	r.Register(&MelodyExpressive)
+	r.Register(&MelodyHypnotic)
 	return r
 }
 
