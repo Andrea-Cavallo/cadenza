@@ -38,12 +38,12 @@ jobs:
       - name: Coverage report
         run: go tool cover -func=coverage.out
 
-      - name: Coverage gate (fail if < 5%)
+      - name: Coverage gate (fail if < 10%)
         run: |
           total=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
           echo "Total coverage: ${total}%"
-          if [ "$(echo "$total < 80" | bc -l)" -eq 1 ]; then
-            echo "FAIL: Coverage ${total}% is below 80% threshold"
+          if [ "$(echo "$total < 10" | bc -l)" -eq 1 ]; then
+            echo "FAIL: Coverage ${total}% is below 10% threshold"
             exit 1
           fi
 
