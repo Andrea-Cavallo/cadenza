@@ -8,10 +8,8 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	// Load from a temp dir with no config file — should fall back to defaults
-	orig, _ := os.Getwd()
 	dir := t.TempDir()
-	os.Chdir(dir)
-	defer os.Chdir(orig)
+	t.Chdir(dir)
 
 	cfg, err := Load()
 	if err != nil {
@@ -47,9 +45,7 @@ llm:
 		t.Fatalf("write config file: %v", err)
 	}
 
-	orig, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(orig)
+	t.Chdir(dir)
 
 	cfg, err := Load()
 	if err != nil {
@@ -69,9 +65,7 @@ llm:
 
 func TestLoadEnvOverride(t *testing.T) {
 	dir := t.TempDir()
-	orig, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(orig)
+	t.Chdir(dir)
 
 	t.Setenv("CADENZA_LLM_PROVIDER", "openai")
 

@@ -121,7 +121,7 @@ func (p *GeminiProvider) Generate(ctx context.Context, req GenerateRequest) (Gen
 
 	// Build JSON schema for response
 	var responseSchema *geminiResponseSchema
-	if req.SchemaProperties != nil && len(req.SchemaProperties) > 0 {
+	if len(req.SchemaProperties) > 0 {
 		responseSchema = &geminiResponseSchema{
 			Type:       "object",
 			Properties: req.SchemaProperties,

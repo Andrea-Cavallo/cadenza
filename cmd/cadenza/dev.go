@@ -342,4 +342,3 @@ func devDumpSpec(_ []string, _ [3]*schema.PatternSpec) {
 	fmt.Printf("  %s✗  dump-spec: not implemented yet%s\n", ansiRed, ansiReset)
 	fmt.Printf("     Use '--dump-spec' flag in normal mode\n\n")
 }
-

@@ -108,7 +108,7 @@ func extractCorrectionExample(valErr error) string {
 	if strings.Contains(errMsg, "chord coherence") && strings.Contains(errMsg, "section") {
 		// Extract section info for example
 		var section, fromBar, toBar int
-		fmt.Sscanf(errMsg, "section %d (bars %d-%d", &section, &fromBar, &toBar)
+		_, _ = fmt.Sscanf(errMsg, "section %d (bars %d-%d", &section, &fromBar, &toBar)
 
 		// Simple example showing correct usage
 		return fmt.Sprintf(`<correction_example>

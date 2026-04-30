@@ -94,8 +94,8 @@ func TestStats(t *testing.T) {
 	c := New(30, dir)
 
 	_ = c.Set([]byte(`"hit"`), "key1")
-	c.Get("key1")       // hit
-	c.Get("nonexist")   // miss
+	c.Get("key1")     // hit
+	c.Get("nonexist") // miss
 
 	stats := c.Stats()
 	if stats["hits"].(int) != 1 {

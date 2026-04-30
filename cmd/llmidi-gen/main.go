@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/caval696/llmidi-gen/internal/generator"
-	"github.com/caval696/llmidi-gen/internal/llm"
-	midipkg "github.com/caval696/llmidi-gen/internal/midi"
-	"github.com/caval696/llmidi-gen/internal/renderer"
-	"github.com/caval696/llmidi-gen/internal/renderer/styleprofile"
-	"github.com/caval696/llmidi-gen/internal/schema"
-	"github.com/caval696/llmidi-gen/internal/theory"
+	"github.com/Andrea-Cavallo/cadenza/internal/generator"
+	"github.com/Andrea-Cavallo/cadenza/internal/llm"
+	midipkg "github.com/Andrea-Cavallo/cadenza/internal/midi"
+	"github.com/Andrea-Cavallo/cadenza/internal/renderer"
+	"github.com/Andrea-Cavallo/cadenza/internal/renderer/styleprofile"
+	"github.com/Andrea-Cavallo/cadenza/internal/schema"
+	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
 var version = "dev"
@@ -80,12 +80,12 @@ func main() {
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
 
 	slog.Info("generating", "key", cfg.Key, "bpm", cfg.BPM, "provider", cfg.ProviderName, "no-llm", cfg.NoLLM)
 
 	provider, err := buildProvider(cfg.NoLLM, cfg.ProviderName, cfg.Model)
 	if err != nil {
+		cancel()
 		fmt.Printf("  %s✗  Provider init failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		os.Exit(1)
 	}
@@ -104,6 +104,7 @@ func main() {
 	fmt.Printf("  %s♩  Melody%s     — phrase arc, motif evolution & fills\n\n", ansiDim, ansiReset)
 
 	result, err := mg.Generate(ctx, cfg.BPM, cfg.Key)
+	cancel()
 	if err != nil {
 		fmt.Printf("  %s✗  Render failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		os.Exit(1)

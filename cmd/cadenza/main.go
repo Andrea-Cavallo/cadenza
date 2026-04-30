@@ -162,7 +162,6 @@ func main() {
 	}
 }
 
-
 // validateFlags checks new CLI flags for correctness.
 func validateFlags(bars, variations int, groove, fromSpec string, bpm float64, key string) error {
 	// Validate bars (must be power of 2)
@@ -247,7 +246,6 @@ func parseCustomProgression(progStr, keyStr string, bars int) (theory.ChordProgr
 
 	return prog, nil
 }
-
 
 // runGeneration validates config and renders the MIDI tracks (with support for all new flags).
 func runGeneration(cfg cliConfig) {

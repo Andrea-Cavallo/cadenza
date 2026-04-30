@@ -337,23 +337,6 @@ func buildHypnoticMotif(h []byte, length int, scaleNotes []string) []int {
 	return motif
 }
 
-func buildEvolution(bpm float64, key theory.Key) []schema.EvolutionStep {
-	if key.Mode == "minor" && bpm >= 124 {
-		return []schema.EvolutionStep{
-			{FromBar: 1, ToBar: 4, Action: "introduce", Intensity: 0.4},
-			{FromBar: 5, ToBar: 8, Action: "build", Intensity: 0.6},
-			{FromBar: 9, ToBar: 12, Action: "peak", Intensity: 0.9},
-			{FromBar: 13, ToBar: 16, Action: "release", Intensity: 0.5},
-		}
-	}
-	return []schema.EvolutionStep{
-		{FromBar: 1, ToBar: 4, Action: "introduce", Intensity: 0.3},
-		{FromBar: 5, ToBar: 8, Action: "build", Intensity: 0.5},
-		{FromBar: 9, ToBar: 12, Action: "peak", Intensity: 0.8},
-		{FromBar: 13, ToBar: 16, Action: "release", Intensity: 0.6},
-	}
-}
-
 // buildBassEvolution creates evolution for bass — full energy, minimal density changes.
 func buildBassEvolution(bpm float64, key theory.Key) []schema.EvolutionStep {
 	if bpm >= 128 {

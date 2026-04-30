@@ -181,7 +181,6 @@ func progressionStringDetailed(prog theory.ChordProgression) string {
 	return strings.Join(parts, "\n")
 }
 
-
 // hashContent computes SHA-256 hash of content for cache key generation.
 // REFACTOR.md point 6: Used to invalidate cache when prompt templates change.
 func hashContent(content []byte) string {
