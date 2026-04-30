@@ -10,7 +10,11 @@
 <p align="center">
 
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://golang.org)
-
+[![CI](https://github.com/Andrea-Cavallo/cadenza/actions/workflows/ci.yml/badge.svg)](https://github.com/Andrea-Cavallo/cadenza/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![CGO_ENABLED=0](https://img.shields.io/badge/CGO-disabled-lightgrey)](https://pkg.go.dev/cmd/cgo)
 
