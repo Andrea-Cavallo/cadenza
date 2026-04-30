@@ -74,8 +74,8 @@ func (w *Writer) WriteFile(path string, events []MIDIEvent) error {
 func buildHeader(trackLen int) []byte {
 	h := make([]byte, 14)
 	copy(h[0:4], "MThd")
-	binary.BigEndian.PutUint32(h[4:8], 6) // header length
-	binary.BigEndian.PutUint16(h[8:10], 0) // format 0
+	binary.BigEndian.PutUint32(h[4:8], 6)   // header length
+	binary.BigEndian.PutUint16(h[8:10], 0)  // format 0
 	binary.BigEndian.PutUint16(h[10:12], 1) // 1 track
 	binary.BigEndian.PutUint16(h[12:14], ticksPerBeat)
 	return h
@@ -86,8 +86,8 @@ func (w *Writer) buildTrack(events []MIDIEvent) []byte {
 
 	// tempo event
 	microsecondsPerBeat := uint32(60_000_000 / w.bpm)
-	body = append(body, varLen(0)...)         // delta 0
-	body = append(body, 0xFF, 0x51, 0x03)     // meta tempo
+	body = append(body, varLen(0)...)     // delta 0
+	body = append(body, 0xFF, 0x51, 0x03) // meta tempo
 	body = append(body,
 		byte(microsecondsPerBeat>>16),
 		byte(microsecondsPerBeat>>8),

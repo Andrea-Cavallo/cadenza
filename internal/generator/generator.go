@@ -115,10 +115,10 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 
 func exampleSpecJSON(patternType string) string {
 	example := schema.PatternSpec{
-		SpecVersion: "1.0",
-		PatternType: patternType,
-		Meta:        schema.PatternMeta{Name: "example", BPM: 122, Key: "Am", Bars: 16, Description: "example pattern"},
-		Theory:      schema.TheorySpec{Key: "A", Mode: "minor", Scale: "minor_natural", OctaveRange: [2]int{2, 3}},
+		SpecVersion:  "1.0",
+		PatternType:  patternType,
+		Meta:         schema.PatternMeta{Name: "example", BPM: 122, Key: "Am", Bars: 16, Description: "example pattern"},
+		Theory:       schema.TheorySpec{Key: "A", Mode: "minor", Scale: "minor_natural", OctaveRange: [2]int{2, 3}},
 		StyleProfile: "bass_progressive",
 		Motif: schema.MotifSpec{
 			Length: 16,

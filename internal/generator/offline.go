@@ -171,11 +171,11 @@ func melodyTemplate(ctx MusicContext) *schema.PatternSpec {
 	steps := make([]schema.StepSpec, 16)
 
 	contours := [][]int{
-		{4, 3, 2, 4, 5, 3, 2, 0},    // arch: rise-fall
-		{6, 5, 4, 3, 4, 5, 6, 4},    // wave: descending oscillation
-		{0, 2, 4, 3, 5, 4, 2, 0},    // call-response
-		{4, 4, 5, 6, 4, 3, 2, 3},    // peak-centered
-		{2, 3, 4, 5, 6, 5, 4, 2},    // mountain
+		{4, 3, 2, 4, 5, 3, 2, 0}, // arch: rise-fall
+		{6, 5, 4, 3, 4, 5, 6, 4}, // wave: descending oscillation
+		{0, 2, 4, 3, 5, 4, 2, 0}, // call-response
+		{4, 4, 5, 6, 4, 3, 2, 3}, // peak-centered
+		{2, 3, 4, 5, 6, 5, 4, 2}, // mountain
 	}
 	contourIdx := int(h[8]) % len(contours)
 	contour := contours[contourIdx]
@@ -337,5 +337,3 @@ func seedHash(seed string) []byte {
 	h := sha256.Sum256([]byte(seed))
 	return h[:]
 }
-
-

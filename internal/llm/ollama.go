@@ -36,10 +36,10 @@ func (o *OllamaProvider) Name() string {
 
 type ollamaRequest struct {
 	Model    string          `json:"model"`
-	Messages []ollamaMsg    `json:"messages"`
-	Stream   bool           `json:"stream"`
+	Messages []ollamaMsg     `json:"messages"`
+	Stream   bool            `json:"stream"`
 	Format   json.RawMessage `json:"format,omitempty"`
-	Options  ollamaOptions  `json:"options,omitempty"`
+	Options  ollamaOptions   `json:"options,omitempty"`
 }
 
 type ollamaMsg struct {
@@ -63,7 +63,7 @@ func (o *OllamaProvider) Generate(ctx context.Context, req GenerateRequest) (Gen
 		msgs = append(msgs, ollamaMsg{Role: "system", Content: req.System})
 	}
 	for _, m := range req.Messages {
-		msgs = append(msgs, ollamaMsg{Role: m.Role, Content: m.Content})
+		msgs = append(msgs, ollamaMsg(m))
 	}
 
 	format := buildOllamaFormat(req.OutputSchema)

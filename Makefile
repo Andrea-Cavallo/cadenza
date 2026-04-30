@@ -47,7 +47,6 @@ fmt:
 	gofmt -w .
 	goimports -w .
 
-<<<<<<< HEAD
 vuln: ## Vulnerability scan via govulncheck
 	@which govulncheck > /dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
 	govulncheck ./...
@@ -56,15 +55,6 @@ sonar: test-coverage ## Run SonarScanner locally (requires sonar-scanner on PATH
 	@which sonar-scanner > /dev/null 2>&1 || \
 		(echo "sonar-scanner not found: https://docs.sonarcloud.io/advanced-setup/ci-based-analysis/sonarscanner-cli/" && exit 1)
 	@test -n "$$SONAR_TOKEN" || (echo "Error: SONAR_TOKEN env var is not set" && exit 1)
-=======
-vuln: ## Run govulncheck — Go vulnerability scan
-	@which govulncheck > /dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
-	govulncheck ./...
-
-sonar: test-coverage ## Run SonarScanner locally (requires sonar-scanner on PATH and SONAR_TOKEN env var)
-	@which sonar-scanner > /dev/null 2>&1 || (echo "sonar-scanner not found. Install from https://docs.sonarcloud.io/advanced-setup/ci-based-analysis/sonarscanner-cli/" && exit 1)
-	@test -n "$$SONAR_TOKEN" || (echo "SONAR_TOKEN env var not set. Export it before running make sonar." && exit 1)
->>>>>>> c484ac349a230a4de9c6d72bbd2c39d4281a014e
 	sonar-scanner \
 		-Dsonar.projectKey=Andrea-Cavallo_cadenza \
 		-Dsonar.organization=andrea-cavallo \
@@ -72,13 +62,8 @@ sonar: test-coverage ## Run SonarScanner locally (requires sonar-scanner on PATH
 		-Dsonar.go.coverage.reportPaths=coverage.out \
 		-Dsonar.token="$$SONAR_TOKEN"
 
-<<<<<<< HEAD
 ci: fmt vet lint vuln test-coverage ## Full local CI pipeline: fmt → vet → lint → vuln → coverage
 	@echo "CI pipeline complete."
-=======
-ci: fmt vet lint vuln test-coverage ## Run full local CI pipeline (mirrors GitHub Actions)
-	@echo "✓ fmt  ✓ vet  ✓ lint  ✓ vuln  ✓ tests  ✓ coverage"
->>>>>>> c484ac349a230a4de9c6d72bbd2c39d4281a014e
 
 ## Run
 

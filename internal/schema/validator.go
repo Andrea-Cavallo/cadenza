@@ -183,4 +183,3 @@ func qualitySuffixValidator(q string) string {
 		return ""
 	}
 }
-

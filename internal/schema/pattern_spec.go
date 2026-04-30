@@ -1,15 +1,15 @@
 package schema
 
 type PatternSpec struct {
-	SpecVersion   string          `json:"spec_version"`
-	PatternType   string          `json:"pattern_type"`
-	Meta          PatternMeta     `json:"meta"`
-	Theory        TheorySpec      `json:"theory"`
-	StyleProfile  string          `json:"style_profile"`
-	Motif         MotifSpec       `json:"motif"`
-	Evolution     []EvolutionStep `json:"evolution"`
+	SpecVersion   string           `json:"spec_version"`
+	PatternType   string           `json:"pattern_type"`
+	Meta          PatternMeta      `json:"meta"`
+	Theory        TheorySpec       `json:"theory"`
+	StyleProfile  string           `json:"style_profile"`
+	Motif         MotifSpec        `json:"motif"`
+	Evolution     []EvolutionStep  `json:"evolution"`
 	Automation    AutomationIntent `json:"automation"`
-	VariationSeed string          `json:"variation_seed"`
+	VariationSeed string           `json:"variation_seed"`
 }
 
 type PatternMeta struct {

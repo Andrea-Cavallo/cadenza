@@ -117,15 +117,13 @@ func extractTextContent(resp *anthropic.Message) string {
 	return ""
 }
 
-func buildSchemaFromJSON(exampleJSON []byte) (map[string]any, []string) {
+func buildSchemaFromJSON(exampleJSON []byte) (properties map[string]any, required []string) {
 	var example map[string]any
 	if err := json.Unmarshal(exampleJSON, &example); err != nil {
 		return map[string]any{}, nil
 	}
 
-	properties := make(map[string]any)
-	var required []string
-
+	properties = make(map[string]any)
 	for key, val := range example {
 		required = append(required, key)
 		properties[key] = inferSchemaProperty(val)

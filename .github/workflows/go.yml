@@ -1,12 +1,7 @@
 name: Go Build
 
-<<<<<<< HEAD
 # Lightweight sanity build on every push.
 # Full quality pipeline (lint, security, sonar) runs in ci.yml.
-=======
-# Lightweight sanity build — runs on every push to every branch.
-# Full test suite, lint, and SonarCloud run in ci.yml.
->>>>>>> c484ac349a230a4de9c6d72bbd2c39d4281a014e
 
 on:
   push:

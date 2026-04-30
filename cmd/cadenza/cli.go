@@ -310,7 +310,7 @@ func runInteractiveCLI() (cliConfig, bool) {
 			fmt.Println()
 			return cfg, true
 		case "n", "no":
-			fmt.Printf("\n  %s✕  Session cancelled.%s\n\n", ansiDim, ansiReset)
+			fmt.Printf("\n  %s✕  Session canceled.%s\n\n", ansiDim, ansiReset)
 			return cfg, false
 		default:
 			fmt.Printf("  %s→ y or n%s\n", ansiRed, ansiReset)
