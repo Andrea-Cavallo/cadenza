@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/caval696/llmidi-gen/internal/theory"
+	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
 // ANSI escape codes.

@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/caval696/llmidi-gen/internal/generator"
-	"github.com/caval696/llmidi-gen/internal/llm"
-	midipkg "github.com/caval696/llmidi-gen/internal/midi"
-	"github.com/caval696/llmidi-gen/internal/renderer"
-	"github.com/caval696/llmidi-gen/internal/renderer/styleprofile"
-	"github.com/caval696/llmidi-gen/internal/schema"
-	"github.com/caval696/llmidi-gen/internal/theory"
+	"github.com/Andrea-Cavallo/cadenza/internal/generator"
+	"github.com/Andrea-Cavallo/cadenza/internal/llm"
+	midipkg "github.com/Andrea-Cavallo/cadenza/internal/midi"
+	"github.com/Andrea-Cavallo/cadenza/internal/renderer"
+	"github.com/Andrea-Cavallo/cadenza/internal/renderer/styleprofile"
+	"github.com/Andrea-Cavallo/cadenza/internal/schema"
+	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
 var version = "dev"
