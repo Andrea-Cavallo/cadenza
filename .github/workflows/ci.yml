@@ -158,7 +158,9 @@ jobs:
         run: |
             mkdir -p output
             chmod 755 output
-            docker run --rm -v "$(pwd)/output:/app/output" cadenza:ci \
+            docker run --rm \
+              --user "$(id -u):$(id -g)" \
+              -v "$(pwd)/output:/app/output" cadenza:ci \
               --bpm 122 --key Am --no-llm
             count=$(ls output/*.mid 2>/dev/null | wc -l)
             [ "$count" -eq 3 ] || (echo "Expected 3 MIDI files, got $count" && exit 1)
