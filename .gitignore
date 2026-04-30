@@ -42,11 +42,9 @@ ehthumbs.db
 .tokensave/
 
 # Internal docs (not shipped)
-REFACTOR.md
 SPECS.md
 TODO.md
 docs/
 
 # Claude Code / AI
-CLAUDE.md
 .claude/

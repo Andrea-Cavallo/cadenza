@@ -1,0 +1,35 @@
+version: 2
+
+updates:
+  # ── GitHub Actions ─────────────────────────────────────────────────────────
+  # Dependabot will open PRs that replace tag refs (e.g. @v4) with full SHA
+  # hashes and keep them updated. This satisfies the OSSF Scorecard
+  # "Pinned-Dependencies" check without requiring manual SHA management.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Rome
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # ── Go modules ─────────────────────────────────────────────────────────────
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Rome
+    commit-message:
+      prefix: "chore"
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
