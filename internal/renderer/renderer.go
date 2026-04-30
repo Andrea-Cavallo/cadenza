@@ -42,49 +42,59 @@ func (r *Renderer) Render(spec *schema.PatternSpec, profile *styleprofile.StyleP
 			events = append(events, filterSweepEvents(bar, spec.Meta.Bars, sweepStyle, spec.VariationSeed, spec.PatternType, profile, spec.Evolution)...)
 		}
 
-		for stepIdx, step := range barSteps {
-			if !step.Active || step.Note == "" {
-				continue
-			}
-
-			midiNote, err := theory.NoteToMIDI(step.Note)
-			if err != nil {
-				continue
-			}
-
-			tick := resolveTick(bar, stepIdx, profile)
-			vel := resolveVelocity(stepIdx, step.Accent, step.Ghost, profile, velScale)
-
-			// Slide gate: extend to next active note.
-			var nextActiveTick int64
-			if step.Slide {
-				nextActiveTick = findNextActiveTick(barSteps, bar, stepIdx, profile)
-			}
-			gate := resolveGateTicksExt(stepIdx, step.Accent, step.Ghost, step.Slide, step.Legato, step.Staccato, profile, tick, nextActiveTick)
-
-			// Portamento CC65 before each note.
-			if profile.Portamento.UseCC65 {
-				events = append(events, portamentoEvents(tick, step.Slide, profile)...)
-			}
-
-			events = append(events, midi.MIDIEvent{
-				Type:     midi.NoteOn,
-				Tick:     tick,
-				Channel:  0,
-				Note:     uint8(midiNote),
-				Velocity: vel,
-			})
-
-			events = append(events, midi.MIDIEvent{
-				Type:    midi.NoteOff,
-				Tick:    tick + gate,
-				Channel: 0,
-				Note:    uint8(midiNote),
-			})
-		}
+		events = append(events, r.renderBar(bar, barSteps, profile, velScale)...)
 	}
 
 	return events, nil
+}
+
+// renderBar converts all active steps in a single bar into NoteOn+NoteOff (and optional CC) events.
+func (r *Renderer) renderBar(bar int, barSteps []schema.StepSpec, profile *styleprofile.StyleProfile, velScale float64) []midi.MIDIEvent {
+	var events []midi.MIDIEvent
+	for stepIdx, step := range barSteps {
+		if !step.Active || step.Note == "" {
+			continue
+		}
+
+		midiNote, err := theory.NoteToMIDI(step.Note)
+		if err != nil {
+			continue
+		}
+
+		tick := resolveTick(bar, stepIdx, profile)
+		vel := resolveVelocity(stepIdx, step.Accent, step.Ghost, profile, velScale)
+
+		// Slide gate: extend to next active note.
+		var nextActiveTick int64
+		if step.Slide {
+			nextActiveTick = findNextActiveTick(barSteps, bar, stepIdx, profile)
+		}
+		gate := resolveGateTicksExt(
+			stepFlags{Accent: step.Accent, Ghost: step.Ghost, Slide: step.Slide, Legato: step.Legato, Staccato: step.Staccato},
+			profile, tick, nextActiveTick,
+		)
+
+		// Portamento CC65 before each note.
+		if profile.Portamento.UseCC65 {
+			events = append(events, portamentoEvents(tick, step.Slide, profile)...)
+		}
+
+		events = append(events, midi.MIDIEvent{
+			Type:     midi.NoteOn,
+			Tick:     tick,
+			Channel:  0,
+			Note:     uint8(midiNote),
+			Velocity: vel,
+		})
+
+		events = append(events, midi.MIDIEvent{
+			Type:    midi.NoteOff,
+			Tick:    tick + gate,
+			Channel: 0,
+			Note:    uint8(midiNote),
+		})
+	}
+	return events
 }
 
 func dynamicCurveScale(bar, totalBars int, profile *styleprofile.StyleProfile) float64 {

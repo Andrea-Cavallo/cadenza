@@ -34,44 +34,59 @@ func GenerateDrumPattern(bpm float64, bars int, seed string) []midipkg.MIDIEvent
 	for step := 0; step < totalSteps; step++ {
 		tick := int64(step * resolution)
 		barPos := step % stepsPerBar
-
-		// Kick: 4-on-the-floor with occasional variation
-		if barPos%4 == 0 {
-			velocity := uint8(100)
-			if barPos == 0 {
-				velocity = 110 // accent downbeat
-			}
-			events = append(events, createDrumHit(tick, kickNote, velocity))
-		} else if bars > 16 && (step+rng)%32 == 16 {
-			// Add syncopated kicks in longer arrangements
-			events = append(events, createDrumHit(tick, kickNote, 85))
-		}
-
-		// Clap/Snare: on 2 and 4
-		if barPos == 4 || barPos == 12 {
-			vel := uint8(95)
-			if (step/stepsPerBar)%4 == 3 {
-				// Every 4th bar, accent the snare
-				vel = 105
-			}
-			events = append(events, createDrumHit(tick, clapNote, vel))
-		}
-
-		// Closed hi-hat: steady 16ths with velocity variation
-		if barPos%2 == 0 {
-			vel := uint8(60)
-			if barPos%4 == 0 {
-				vel = 70 // accent on beats
-			}
-			events = append(events, createDrumHit(tick, closedHHNote, vel))
-		}
-
-		// Open hi-hat: occasional off-beat emphasis
-		if bars > 16 && barPos == 6 && (step/stepsPerBar)%8 == 7 {
-			events = append(events, createDrumHit(tick, openHHNote, 75))
-		}
+		events = appendKickEvents(events, tick, barPos, step, bars, rng)
+		events = appendClapEvents(events, tick, barPos, step, stepsPerBar)
+		events = appendClosedHHEvents(events, tick, barPos)
+		events = appendOpenHHEvents(events, tick, barPos, step, bars, stepsPerBar)
 	}
 
+	return events
+}
+
+// appendKickEvents adds kick drum events for the current step.
+func appendKickEvents(events []midipkg.MIDIEvent, tick int64, barPos, step, bars, rng int) []midipkg.MIDIEvent {
+	if barPos%4 == 0 {
+		velocity := uint8(100)
+		if barPos == 0 {
+			velocity = 110
+		}
+		return append(events, createDrumHit(tick, kickNote, velocity))
+	}
+	if bars > 16 && (step+rng)%32 == 16 {
+		return append(events, createDrumHit(tick, kickNote, 85))
+	}
+	return events
+}
+
+// appendClapEvents adds clap/snare drum events for the current step.
+func appendClapEvents(events []midipkg.MIDIEvent, tick int64, barPos, step, stepsPerBar int) []midipkg.MIDIEvent {
+	if barPos != 4 && barPos != 12 {
+		return events
+	}
+	vel := uint8(95)
+	if (step/stepsPerBar)%4 == 3 {
+		vel = 105
+	}
+	return append(events, createDrumHit(tick, clapNote, vel))
+}
+
+// appendClosedHHEvents adds closed hi-hat events for the current step.
+func appendClosedHHEvents(events []midipkg.MIDIEvent, tick int64, barPos int) []midipkg.MIDIEvent {
+	if barPos%2 != 0 {
+		return events
+	}
+	vel := uint8(60)
+	if barPos%4 == 0 {
+		vel = 70
+	}
+	return append(events, createDrumHit(tick, closedHHNote, vel))
+}
+
+// appendOpenHHEvents adds open hi-hat events for the current step.
+func appendOpenHHEvents(events []midipkg.MIDIEvent, tick int64, barPos, step, bars, stepsPerBar int) []midipkg.MIDIEvent {
+	if bars > 16 && barPos == 6 && (step/stepsPerBar)%8 == 7 {
+		return append(events, createDrumHit(tick, openHHNote, 75))
+	}
 	return events
 }
 

@@ -17,7 +17,10 @@ on:
   release:
     types: [created]
 
-permissions: read-all
+permissions:
+  contents: read
+  actions: read
+  id-token: read
 
 jobs:
   # ========================================================================================================================================

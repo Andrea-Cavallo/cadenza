@@ -165,38 +165,12 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 	if musicCtx.Key.Mode == "minor" {
 		keyStr += "m"
 	}
-
 	for _, pt := range patternTypes {
-		spec := patterns[pt]
-		profile, err := mg.registry.LoadForType(pt, spec.StyleProfile)
+		path, err := mg.renderAndSave(pt, patterns[pt], keyStr, ts, varNum, musicCtx.BPM)
 		if err != nil {
-			slog.Debug("custom profile not found, using default", "type", pt, "requested", spec.StyleProfile, "error", err)
-			profile, err = mg.registry.DefaultForType(pt)
-			if err != nil {
-				return nil, fmt.Errorf("%s profile: %w", pt, err)
-			}
+			return nil, err
 		}
-		slog.Debug("rendering with profile", "type", pt, "profile", profile.Name, "bars", spec.Meta.Bars)
-
-		events, err := mg.renderer.Render(spec, profile)
-		if err != nil {
-			return nil, fmt.Errorf("%s render: %w", pt, err)
-		}
-		slog.Debug("rendered", "type", pt, "events", len(events))
-
-		suffix := ""
-		if varNum > 1 {
-			suffix = fmt.Sprintf("_v%d", varNum)
-		}
-		filename := fmt.Sprintf("%s_%s_%s_%.0f_%s%s.mid", "output", pt, keyStr, musicCtx.BPM, ts, suffix)
-		outputPath := filepath.Join(mg.outputDir, filename)
-
-		if err := mg.writer.WriteFile(outputPath, events); err != nil {
-			return nil, fmt.Errorf("%s write: %w", pt, err)
-		}
-
-		slog.Info("wrote MIDI", "file", outputPath, "events", len(events))
-		outputFiles = append(outputFiles, outputPath)
+		outputFiles = append(outputFiles, path)
 	}
 
 	return &GenerationResult{
@@ -205,6 +179,38 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 		BPM:           musicCtx.BPM,
 		Key:           keyStr,
 	}, nil
+}
+
+// renderAndSave renders a single pattern spec and writes the MIDI file. Returns the output path.
+func (mg *MultiGenerator) renderAndSave(pt string, spec *schema.PatternSpec, keyStr, ts string, varNum int, bpm float64) (string, error) {
+	profile, err := mg.registry.LoadForType(pt, spec.StyleProfile)
+	if err != nil {
+		slog.Debug("custom profile not found, using default", "type", pt, "requested", spec.StyleProfile, "error", err)
+		profile, err = mg.registry.DefaultForType(pt)
+		if err != nil {
+			return "", fmt.Errorf("%s profile: %w", pt, err)
+		}
+	}
+	slog.Debug("rendering with profile", "type", pt, "profile", profile.Name, "bars", spec.Meta.Bars)
+
+	events, err := mg.renderer.Render(spec, profile)
+	if err != nil {
+		return "", fmt.Errorf("%s render: %w", pt, err)
+	}
+	slog.Debug("rendered", "type", pt, "events", len(events))
+
+	suffix := ""
+	if varNum > 1 {
+		suffix = fmt.Sprintf("_v%d", varNum)
+	}
+	filename := fmt.Sprintf("%s_%s_%s_%.0f_%s%s.mid", "output", pt, keyStr, bpm, ts, suffix)
+	outputPath := filepath.Join(mg.outputDir, filename)
+
+	if err := mg.writer.WriteFile(outputPath, events); err != nil {
+		return "", fmt.Errorf("%s write: %w", pt, err)
+	}
+	slog.Info("wrote MIDI", "file", outputPath, "events", len(events))
+	return outputPath, nil
 }
 
 func (mg *MultiGenerator) generatePattern(ctx context.Context, musicCtx MusicContext, patternType string) (*schema.PatternSpec, error) {
