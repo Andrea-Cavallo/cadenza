@@ -1,0 +1,33 @@
+version: 2
+
+updates:
+  # ── GitHub Actions ──────────────────────────────────────────────────────────
+  # Dependabot replaces version tags (e.g. @v4) with full commit SHA hashes
+  # and keeps them updated. This resolves the OSSF Scorecard
+  # "Pinned-Dependencies" warning automatically — no manual SHA management.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Rome
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # ── Go modules ──────────────────────────────────────────────────────────────
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Rome
+    commit-message:
+      prefix: "chore"
+    groups:
+      go-dependencies:
+        patterns: ["*"]
