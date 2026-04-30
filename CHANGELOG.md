@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run the Docker smoke test container with the runner UID/GID so mounted `output/` remains writable without restoring world-writable permissions.
 - Pinned `JetBrains/qodana-action` in the Qodana workflow to a full commit SHA to satisfy dependency pinning security checks.
 - Refactored CLI, generator, and LLM coverage tests into smaller helpers to clear remaining Sonar cognitive-complexity and Go idiom warnings without reducing coverage.
+- Rewrote the README in English, Italian, and Spanish and highlighted offline algorithmic generation as a core strength rather than a fallback.
+- Expanded the README with practical post-clone setup, build, and run instructions for Windows, macOS, and Linux users.
 
 ### Removed
 - **Dead code cleanup** — Removed 480+ lines of unused code identified through static analysis
