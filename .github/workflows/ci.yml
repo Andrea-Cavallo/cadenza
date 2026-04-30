@@ -60,15 +60,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Go must be set up BEFORE installing golangci-lint so that
+      # "go install" compiles golangci-lint with the project's Go version.
+      # Using the pre-built binary from golangci-lint-action would download
+      # a binary compiled with an older Go toolchain, causing:
+      #   "can't load config: the Go language version used to build
+      #    golangci-lint is lower than the targeted Go version"
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run golangci-lint
+        run: golangci-lint run ./...
 
   # ──────────────────────────────────────────────
   # 3. Security — vulnerability scan
