@@ -80,12 +80,12 @@ func main() {
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
 
 	slog.Info("generating", "key", cfg.Key, "bpm", cfg.BPM, "provider", cfg.ProviderName, "no-llm", cfg.NoLLM)
 
 	provider, err := buildProvider(cfg.NoLLM, cfg.ProviderName, cfg.Model)
 	if err != nil {
+		cancel()
 		fmt.Printf("  %s✗  Provider init failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		os.Exit(1)
 	}
@@ -104,6 +104,7 @@ func main() {
 	fmt.Printf("  %s♩  Melody%s     — phrase arc, motif evolution & fills\n\n", ansiDim, ansiReset)
 
 	result, err := mg.Generate(ctx, cfg.BPM, cfg.Key)
+	cancel()
 	if err != nil {
 		fmt.Printf("  %s✗  Render failed: %v%s\n\n", ansiRed+ansiBold, err, ansiReset)
 		os.Exit(1)

@@ -9,7 +9,7 @@ import (
 // GenerateJSONSchema generates a JSON Schema from the PatternSpec struct using invopop/jsonschema.
 // This replaces manual schema inference from example JSON, providing a complete and accurate schema
 // that includes all fields, proper types, and validation constraints.
-func GenerateJSONSchema() (map[string]any, []string, error) {
+func GenerateJSONSchema() (properties map[string]any, required []string, err error) {
 	reflector := jsonschema.Reflector{
 		AllowAdditionalProperties: false,
 		DoNotReference:            true, // inline all definitions
@@ -29,12 +29,12 @@ func GenerateJSONSchema() (map[string]any, []string, error) {
 	}
 
 	// Extract properties and required fields from the generated schema
-	properties, ok := schemaMap["properties"].(map[string]any)
+	var ok bool
+	properties, ok = schemaMap["properties"].(map[string]any)
 	if !ok {
 		properties = make(map[string]any)
 	}
 
-	required := []string{}
 	if reqList, ok := schemaMap["required"].([]any); ok {
 		for _, r := range reqList {
 			if s, ok := r.(string); ok {

@@ -93,15 +93,12 @@ func (p *OpenAIProvider) Generate(ctx context.Context, req GenerateRequest) (Gen
 		{Role: "system", Content: req.System},
 	}
 	for _, msg := range req.Messages {
-		messages = append(messages, openAIMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
+		messages = append(messages, openAIMessage(msg))
 	}
 
 	// Build structured output schema
 	var responseFormat *openAIResponseFormat
-	if req.SchemaProperties != nil && len(req.SchemaProperties) > 0 {
+	if len(req.SchemaProperties) > 0 {
 		schema := map[string]any{
 			"type":                 "object",
 			"properties":           req.SchemaProperties,
