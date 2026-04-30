@@ -1,5 +1,5 @@
 .PHONY: build test lint run clean listening-test test-integration test-coverage \
-       docker docker-run release-snapshot release help
+       docker docker-run release-snapshot release sonar vuln ci help
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -35,7 +35,7 @@ test-coverage:
 test-coverage-html: test-coverage
 	go tool cover -html=coverage.out -o coverage.html
 
-## Lint
+## Lint & Quality
 
 lint:
 	golangci-lint run ./...
@@ -46,6 +46,23 @@ vet:
 fmt:
 	gofmt -w .
 	goimports -w .
+
+vuln: ## Run govulncheck — Go vulnerability scan
+	@which govulncheck > /dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+	govulncheck ./...
+
+sonar: test-coverage ## Run SonarScanner locally (requires sonar-scanner on PATH and SONAR_TOKEN env var)
+	@which sonar-scanner > /dev/null 2>&1 || (echo "sonar-scanner not found. Install from https://docs.sonarcloud.io/advanced-setup/ci-based-analysis/sonarscanner-cli/" && exit 1)
+	@test -n "$$SONAR_TOKEN" || (echo "SONAR_TOKEN env var not set. Export it before running make sonar." && exit 1)
+	sonar-scanner \
+		-Dsonar.projectKey=Andrea-Cavallo_cadenza \
+		-Dsonar.organization=andrea-cavallo \
+		-Dsonar.sources=. \
+		-Dsonar.go.coverage.reportPaths=coverage.out \
+		-Dsonar.token="$$SONAR_TOKEN"
+
+ci: fmt vet lint vuln test-coverage ## Run full local CI pipeline (mirrors GitHub Actions)
+	@echo "✓ fmt  ✓ vet  ✓ lint  ✓ vuln  ✓ tests  ✓ coverage"
 
 ## Run
 
@@ -111,18 +128,21 @@ clean:
 ## Help
 
 help:
-	@echo "Cadenza — AI-powered MIDI generator"
+	@echo "Cadenza — AI-powered MIDI generator (backend)"
 	@echo ""
 	@echo "Build:"
 	@echo "  make build          Build binary (bin/cadenza)"
 	@echo "  make build-all      Cross-compile all platforms"
 	@echo "  make docker         Build Docker image"
 	@echo ""
-	@echo "Test:"
+	@echo "Test & Quality:"
 	@echo "  make test           Run unit tests"
 	@echo "  make test-race      Run tests with race detector"
 	@echo "  make test-coverage  Generate coverage report"
 	@echo "  make lint           Run golangci-lint"
+	@echo "  make vuln           Run govulncheck (vulnerability scan)"
+	@echo "  make sonar          Run SonarScanner locally (requires SONAR_TOKEN)"
+	@echo "  make ci             Run full local CI pipeline (fmt+vet+lint+vuln+coverage)"
 	@echo ""
 	@echo "Run:"
 	@echo "  make run            Interactive session (Claude, Am, 122 BPM)"
@@ -131,7 +151,7 @@ help:
 	@echo "  make listening-test Generate patterns for DAW comparison"
 	@echo ""
 	@echo "Docker:"
-	@echo "  make docker-run     Run in container (offline mode)
+	@echo "  make docker-run     Run in container (offline mode)"
 	@echo ""
 	@echo "Release:"
-	@echo "  make release        Build + zip all platforms into dist/""
+	@echo "  make release        Build + zip all platforms into dist/"
