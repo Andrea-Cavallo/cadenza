@@ -2,6 +2,7 @@ package theory
 
 import "fmt"
 
+// Chord represents a musical chord with root, quality, and note names.
 type Chord struct {
 	Root    string
 	Quality string   // "major", "minor", "dim", "aug", "sus2", "sus4"
@@ -47,7 +48,7 @@ func ChordNotes(root, quality string) ([]string, error) {
 	return notes, nil
 }
 
-func ChordsInKey(root, scaleType string) ([]Chord, error) {
+func chordsInKey(root, scaleType string) ([]Chord, error) {
 	qualities, ok := scaleChordQualities[scaleType]
 	if !ok {
 		return nil, fmt.Errorf("no chord qualities for scale %q", scaleType)

@@ -1,5 +1,6 @@
 package styleprofile
 
+// StyleProfile is a deterministic rendering profile controlling timing, velocity, gate, and automation.
 type StyleProfile struct {
 	Name        string
 	PatternType string // "bassline", "arpeggio", "melody"
@@ -13,12 +14,14 @@ type StyleProfile struct {
 	Density     DensityConstraint
 }
 
+// TimingProfile controls per-step timing offsets and downbeat rigidity.
 type TimingProfile struct {
 	DownbeatRigid  bool
 	OffbeatOffset  []int
 	HumanizedDelay bool
 }
 
+// VelocityProfile defines accent grid, ghost velocity, and dynamic curve scaling.
 type VelocityProfile struct {
 	AccentGrid    []int
 	GhostVelocity int
@@ -27,6 +30,7 @@ type VelocityProfile struct {
 	DynamicCurve  string // "flat" (default), "crescendo", "arch"
 }
 
+// GateProfile controls note duration ratios for different articulations.
 type GateProfile struct {
 	NormalGate   float64
 	AccentGate   float64
@@ -36,11 +40,13 @@ type GateProfile struct {
 	LegatoGate   float64
 }
 
+// PortamentoProfile configures CC5/CC65 portamento behavior for slide notes.
 type PortamentoProfile struct {
 	CC5Value int
 	UseCC65  bool
 }
 
+// FilterSweepProfile configures CC74 filter cutoff automation curve and range.
 type FilterSweepProfile struct {
 	Curve       string
 	Resolution  int
@@ -49,6 +55,7 @@ type FilterSweepProfile struct {
 	Range       map[string][2]int
 }
 
+// ModWheelProfile configures CC1 modulation wheel automation.
 type ModWheelProfile struct {
 	Enabled    bool
 	Resolution int
@@ -56,11 +63,13 @@ type ModWheelProfile struct {
 	Curve      string
 }
 
+// NoteRangeConstraint defines valid MIDI note bounds for a pattern type.
 type NoteRangeConstraint struct {
 	MinMIDI int
 	MaxMIDI int
 }
 
+// DensityConstraint defines how many steps must be active/silent in a motif.
 type DensityConstraint struct {
 	MinActiveSteps int
 	MaxActiveSteps int

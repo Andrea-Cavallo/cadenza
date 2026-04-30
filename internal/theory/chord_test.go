@@ -35,9 +35,9 @@ func TestChordNotes(t *testing.T) {
 }
 
 func TestChordsInKey(t *testing.T) {
-	chords, err := ChordsInKey("A", "minor_natural")
+	chords, err := chordsInKey("A", "minor_natural")
 	if err != nil {
-		t.Fatalf("ChordsInKey error: %v", err)
+		t.Fatalf("chordsInKey error: %v", err)
 	}
 	if len(chords) != 7 {
 		t.Fatalf("expected 7 diatonic chords, got %d", len(chords))

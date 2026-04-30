@@ -64,8 +64,13 @@ func (c *ClaudeProvider) Generate(ctx context.Context, req GenerateRequest) (Gen
 		params.Temperature = anthropic.Float(req.Temperature)
 	}
 
+	// REFACTOR.md point 1: Use invopop/jsonschema for schema generation instead of manual inference
 	if len(req.OutputSchema) > 0 {
-		schemaProps, required := buildSchemaFromJSON(req.OutputSchema)
+		schemaProps, required := req.SchemaProperties, req.SchemaRequired
+		if schemaProps == nil {
+			// Fallback to old behavior if schema not pre-generated (backward compatibility)
+			schemaProps, required = buildSchemaFromJSON(req.OutputSchema)
+		}
 		params.Tools = []anthropic.ToolUnionParam{{
 			OfTool: &anthropic.ToolParam{
 				Name:        "generate_pattern",

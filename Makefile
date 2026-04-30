@@ -1,5 +1,5 @@
 .PHONY: build test lint run clean listening-test test-integration test-coverage \
-       docker docker-run release-snapshot release sonar vuln ci help
+       docker docker-run release-snapshot release sonar vuln ci help install-tools
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -62,8 +62,14 @@ sonar: test-coverage ## Run SonarScanner locally (requires sonar-scanner on PATH
 		-Dsonar.go.coverage.reportPaths=coverage.out \
 		-Dsonar.token="$$SONAR_TOKEN"
 
-ci: fmt vet lint vuln test-coverage ## Full local CI pipeline: fmt → vet → lint → vuln → coverage
+ci: build fmt vet lint vuln test-coverage ## Full local CI pipeline: build → fmt → vet → lint → vuln → coverage
+	GOOS=linux go build ./...
 	@echo "CI pipeline complete."
+
+install-tools: ## Install development tools (golangci-lint, govulncheck, goimports)
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 
 ## Run
 
@@ -108,6 +114,10 @@ release: build-all ## Package all platform binaries as zip archives in dist/
 	@zip -j dist/cadenza-$(VERSION)-windows-arm64.zip bin/cadenza-windows-arm64.exe
 	@echo "Release archives in dist/:"
 	@ls -lh dist/
+
+release-snapshot: build-all ## Build all platforms without packaging (smoke test)
+	@echo "Snapshot build complete. Binaries in bin/"
+	@ls -lh bin/
 
 ## Docker
 

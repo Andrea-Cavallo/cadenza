@@ -12,7 +12,7 @@ services:
     volumes:
       - ./output:/app/output
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY must be set}
     command: ["--bpm", "122", "--key", "Am", "--provider", "claude"]
 
   cadenza-ollama:
@@ -20,10 +20,11 @@ services:
     volumes:
       - ./output:/app/output
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     command: ["--bpm", "126", "--key", "Em", "--provider", "ollama", "--model", "qwen2.5:7b"]
     environment:
-      - OLLAMA_HOST=http://ollama:11434
+      - CADENZA_LLM_OLLAMA_URL=http://ollama:11434
 
   ollama:
     image: ollama/ollama:latest
@@ -31,6 +32,11 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   ollama_data:

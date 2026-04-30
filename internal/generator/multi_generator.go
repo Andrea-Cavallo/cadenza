@@ -10,6 +10,7 @@ import (
 
 	"github.com/Andrea-Cavallo/cadenza/internal/cache"
 	"github.com/Andrea-Cavallo/cadenza/internal/llm"
+	"github.com/Andrea-Cavallo/cadenza/internal/metrics"
 	midipkg "github.com/Andrea-Cavallo/cadenza/internal/midi"
 	"github.com/Andrea-Cavallo/cadenza/internal/renderer"
 	"github.com/Andrea-Cavallo/cadenza/internal/renderer/styleprofile"
@@ -17,6 +18,7 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
+// Config holds generation parameters for the GenerateAll entry point.
 type Config struct {
 	BPM       float64
 	Key       theory.Key
@@ -27,11 +29,13 @@ type Config struct {
 	Timestamp string
 }
 
+// PatternResult holds the output file path and note count for a single pattern.
 type PatternResult struct {
 	Path      string
 	NoteCount int
 }
 
+// GenerationResult is the output of a full 3-track generation session.
 type GenerationResult struct {
 	Files         []string
 	VariationSeed string
@@ -45,6 +49,7 @@ type patternResult struct {
 	err         error
 }
 
+// MultiGenerator orchestrates parallel generation of 3 pattern types with fallback.
 type MultiGenerator struct {
 	provider  llm.Provider
 	validator *schema.Validator
@@ -70,7 +75,7 @@ func NewMultiGenerator(
 		registry:  registry,
 		renderer:  rend,
 		writer:    writer,
-		cache:     cache.New(".cache"),
+		cache:     cache.New(30, ".cache"), // 30-day TTL
 		outputDir: outputDir,
 	}
 }
@@ -86,7 +91,6 @@ func (mg *MultiGenerator) Generate(ctx context.Context, bpm float64, keyStr stri
 	}
 
 	seed := NewVariationSeed()
-	ts := time.Now().Format("20060102_150405")
 	prog := theory.SelectProgression(parsedKey.Root, parsedKey.Scale, seed)
 
 	slog.Info("chord progression",
@@ -100,7 +104,30 @@ func (mg *MultiGenerator) Generate(ctx context.Context, bpm float64, keyStr stri
 		Bars:             16,
 		VariationSeed:    seed,
 		ChordProgression: prog,
+		Groove:           "straight",
 	}
+
+	return mg.generateInternal(ctx, musicCtx, 1)
+}
+
+// GenerateWithContext generates patterns with full context control (supports all new flags)
+func (mg *MultiGenerator) GenerateWithContext(ctx context.Context, musicCtx MusicContext, bars, varNum int) (*GenerationResult, error) {
+	return mg.generateInternal(ctx, musicCtx, varNum)
+}
+
+func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicContext, varNum int) (*GenerationResult, error) {
+	metrics.GenerationsTotal.Add(1)
+	ts := time.Now().Format("20060102_150405")
+
+	slog.Debug("generation starting",
+		"variation", varNum,
+		"key", musicCtx.Key.Root+" "+musicCtx.Key.Mode,
+		"bpm", musicCtx.BPM,
+		"bars", musicCtx.Bars,
+		"groove", musicCtx.Groove,
+		"seed", musicCtx.VariationSeed,
+		"no_llm", mg.NoLLM,
+	)
 
 	patternTypes := []string{"bassline", "arpeggio", "melody"}
 	results := make(chan patternResult, len(patternTypes))
@@ -110,7 +137,13 @@ func (mg *MultiGenerator) Generate(ctx context.Context, bpm float64, keyStr stri
 		wg.Add(1)
 		go func(pType string) {
 			defer wg.Done()
+			slog.Debug("generating pattern", "type", pType, "seed", musicCtx.VariationSeed)
 			spec, err := mg.generatePattern(ctx, musicCtx, pType)
+			if err != nil {
+				slog.Debug("pattern generation failed", "type", pType, "error", err)
+			} else {
+				slog.Debug("pattern generated", "type", pType, "steps", len(spec.Motif.Steps), "profile", spec.StyleProfile)
+			}
 			results <- patternResult{patternType: pType, spec: spec, err: err}
 		}(pt)
 	}
@@ -121,28 +154,41 @@ func (mg *MultiGenerator) Generate(ctx context.Context, bpm float64, keyStr stri
 	patterns := make(map[string]*schema.PatternSpec)
 	for r := range results {
 		if r.err != nil {
+			metrics.GenerationErrors.Add(1)
 			return nil, fmt.Errorf("%s: %w", r.patternType, r.err)
 		}
 		patterns[r.patternType] = r.spec
 	}
 
 	var outputFiles []string
+	keyStr := musicCtx.Key.Root
+	if musicCtx.Key.Mode == "minor" {
+		keyStr += "m"
+	}
+
 	for _, pt := range patternTypes {
 		spec := patterns[pt]
 		profile, err := mg.registry.LoadForType(pt, spec.StyleProfile)
 		if err != nil {
+			slog.Debug("custom profile not found, using default", "type", pt, "requested", spec.StyleProfile, "error", err)
 			profile, err = mg.registry.DefaultForType(pt)
 			if err != nil {
 				return nil, fmt.Errorf("%s profile: %w", pt, err)
 			}
 		}
+		slog.Debug("rendering with profile", "type", pt, "profile", profile.Name, "bars", spec.Meta.Bars)
 
 		events, err := mg.renderer.Render(spec, profile)
 		if err != nil {
 			return nil, fmt.Errorf("%s render: %w", pt, err)
 		}
+		slog.Debug("rendered", "type", pt, "events", len(events))
 
-		filename := fmt.Sprintf("%s_%s_%s_%.0f_%s.mid", "output", pt, keyStr, bpm, ts)
+		suffix := ""
+		if varNum > 1 {
+			suffix = fmt.Sprintf("_v%d", varNum)
+		}
+		filename := fmt.Sprintf("%s_%s_%s_%.0f_%s%s.mid", "output", pt, keyStr, musicCtx.BPM, ts, suffix)
 		outputPath := filepath.Join(mg.outputDir, filename)
 
 		if err := mg.writer.WriteFile(outputPath, events); err != nil {
@@ -155,14 +201,15 @@ func (mg *MultiGenerator) Generate(ctx context.Context, bpm float64, keyStr stri
 
 	return &GenerationResult{
 		Files:         outputFiles,
-		VariationSeed: seed,
-		BPM:           bpm,
+		VariationSeed: musicCtx.VariationSeed,
+		BPM:           musicCtx.BPM,
 		Key:           keyStr,
 	}, nil
 }
 
 func (mg *MultiGenerator) generatePattern(ctx context.Context, musicCtx MusicContext, patternType string) (*schema.PatternSpec, error) {
 	if mg.NoLLM {
+		metrics.OfflinePatterns.Add(1)
 		spec := offlineTemplate(patternType, musicCtx)
 		if spec == nil {
 			return nil, fmt.Errorf("no offline template for %q", patternType)
@@ -170,9 +217,11 @@ func (mg *MultiGenerator) generatePattern(ctx context.Context, musicCtx MusicCon
 		return spec, nil
 	}
 
+	metrics.LLMCalls.Add(1)
 	gen := NewGenerator(mg.provider, mg.validator, mg.cache)
 	spec, err := gen.Generate(ctx, musicCtx, patternType)
 	if err != nil {
+		metrics.LLMErrors.Add(1)
 		slog.Warn("LLM generation failed, falling back to offline template",
 			"type", patternType,
 			"error", err,

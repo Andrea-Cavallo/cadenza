@@ -13,6 +13,7 @@ const (
 	channel      = 0
 )
 
+// EventType distinguishes MIDI event kinds (NoteOn, NoteOff, ControlChange).
 type EventType int
 
 const (
@@ -21,6 +22,7 @@ const (
 	ControlChange
 )
 
+// MIDIEvent is a single rendered MIDI event positioned at an absolute tick.
 type MIDIEvent struct {
 	Type       EventType
 	Tick       int64
@@ -31,6 +33,7 @@ type MIDIEvent struct {
 	Value      uint8
 }
 
+// Writer produces MIDI Type-0 files at 480 ticks/beat with priority-based event ordering.
 type Writer struct {
 	bpm float64
 }

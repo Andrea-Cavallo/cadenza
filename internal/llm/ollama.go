@@ -66,7 +66,8 @@ func (o *OllamaProvider) Generate(ctx context.Context, req GenerateRequest) (Gen
 		msgs = append(msgs, ollamaMsg(m))
 	}
 
-	format := buildOllamaFormat(req.OutputSchema)
+	// REFACTOR.md point 1: Use pre-generated schema if available, otherwise fallback to old inference
+	format := buildOllamaFormat(req.OutputSchema, req.SchemaProperties, req.SchemaRequired)
 
 	body := ollamaRequest{
 		Model:    o.model,
@@ -114,11 +115,26 @@ func (o *OllamaProvider) Generate(ctx context.Context, req GenerateRequest) (Gen
 	}, nil
 }
 
-func buildOllamaFormat(outputSchema []byte) json.RawMessage {
+func buildOllamaFormat(outputSchema []byte, schemaProps map[string]any, schemaRequired []string) json.RawMessage {
 	if len(outputSchema) == 0 {
 		return json.RawMessage(`"json"`)
 	}
 
+	// REFACTOR.md point 1: Use pre-generated schema if provided (from invopop/jsonschema)
+	if schemaProps != nil {
+		schema := map[string]any{
+			"type":       "object",
+			"properties": schemaProps,
+			"required":   schemaRequired,
+		}
+		b, err := json.Marshal(schema)
+		if err != nil {
+			return json.RawMessage(`"json"`)
+		}
+		return b
+	}
+
+	// Fallback to old inference method for backward compatibility
 	var example map[string]any
 	if err := json.Unmarshal(outputSchema, &example); err != nil {
 		return json.RawMessage(`"json"`)

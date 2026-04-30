@@ -7,6 +7,7 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
+// Renderer transforms a validated PatternSpec into MIDI events using a StyleProfile.
 type Renderer struct{}
 
 func New() *Renderer {
@@ -36,8 +37,9 @@ func (r *Renderer) Render(spec *schema.PatternSpec, profile *styleprofile.StyleP
 		velScale *= dynamicCurveScale(bar, spec.Meta.Bars, profile)
 
 		// Filter sweep CC74 for this bar, synced to evolution.
+		// REFACTOR.md point 5: Pass pattern type for phase offset calculation
 		if sweepStyle != "" {
-			events = append(events, filterSweepEvents(bar, spec.Meta.Bars, sweepStyle, spec.VariationSeed, profile, spec.Evolution)...)
+			events = append(events, filterSweepEvents(bar, spec.Meta.Bars, sweepStyle, spec.VariationSeed, spec.PatternType, profile, spec.Evolution)...)
 		}
 
 		for stepIdx, step := range barSteps {
@@ -95,6 +97,30 @@ func dynamicCurveScale(bar, totalBars int, profile *styleprofile.StyleProfile) f
 			return 0.75 + 0.25*float64(bar)/mid
 		}
 		return 1.0 - 0.15*(float64(bar)-mid)/float64(float64(totalBars)-mid)
+	case "plateau":
+		// 0.7 → 1.0 (bars 1-6) → 1.0 (bars 7-12) → 0.85 (bars 13-16)
+		riseEnd := float64(totalBars) * 0.375   // 6/16
+		plateauEnd := float64(totalBars) * 0.75 // 12/16
+		if float64(bar) < riseEnd {
+			return 0.7 + 0.3*float64(bar)/riseEnd
+		}
+		if float64(bar) < plateauEnd {
+			return 1.0
+		}
+		return 1.0 - 0.15*(float64(bar)-plateauEnd)/(float64(totalBars)-plateauEnd)
+	case "tension":
+		// 0.6 → 0.8 → 1.1 → 0.7 (tension with spike)
+		quarter := float64(totalBars) / 4.0
+		if float64(bar) < quarter {
+			return 0.6 + 0.2*float64(bar)/quarter
+		}
+		if float64(bar) < 2*quarter {
+			return 0.8 + 0.3*(float64(bar)-quarter)/quarter
+		}
+		if float64(bar) < 3*quarter {
+			return 1.1 - 0.4*(float64(bar)-2*quarter)/quarter
+		}
+		return 0.7
 	default:
 		return 1.0
 	}

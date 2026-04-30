@@ -1,6 +1,6 @@
 # CLAUDE.md — LLMIDI-Gen
 
-AI-powered MIDI generator: Go 1.26, LLM-driven, progressive house / melodic techno.
+AI-powered MIDI generator: Go 1.25, LLM-driven, progressive house / melodic techno.
 
 ## Project Overview
 
@@ -43,7 +43,7 @@ User (BPM + Key)
 
 ## Conventions
 
-- **Go 1.26** — use stdlib `log/slog` for logging, `context` for cancellation
+- **Go 1.25** — use stdlib `log/slog` for logging, `context` for cancellation
 - **Module path:** `github.com/Andrea-Cavallo/cadenza`
 - **Tests:** `_test.go` next to source, table-driven, AAA pattern
 - **MIDI:** Type-0, 480 ticks/beat, 120 ticks/step, CH 1 (zero-indexed 0)
@@ -58,8 +58,8 @@ User (BPM + Key)
 **`go.mod` and `.golangci.yml` must always declare the same Go version.**
 
 ```
-go.mod          → go 1.26
-.golangci.yml   → run: go: "1.26"
+go.mod          → go 1.25
+.golangci.yml   → run: go: "1.25"
 ```
 
 Whenever `go.mod` is updated to a newer Go version, `.golangci.yml` must be updated in the same commit. A mismatch causes `golangci-lint` to run the typecheck linter with the wrong toolchain, producing false `package requires newer Go version` errors and `undefined: <symbol>` errors for all SDK types. This has caused CI failures before and must not happen again.
@@ -145,11 +145,11 @@ go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic
 If you see errors like:
 
 ```
-package requires newer Go version go1.26 (application built with go1.24)
+package requires newer Go version go1.25 (application built with go1.23)
 undefined: anthropic
 ```
 
-The cause is always `.golangci.yml` declaring a lower `go:` version than `go.mod`. Fix: align both to the same version (currently `1.26`). Never set `.golangci.yml` `go:` below the version in `go.mod`.
+The cause is always `.golangci.yml` declaring a lower `go:` version than `go.mod`. Fix: align both to the same version (currently `1.25`). Never set `.golangci.yml` `go:` below the version in `go.mod`.
 
 ### Linter warnings vs errors
 

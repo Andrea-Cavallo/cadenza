@@ -6,7 +6,7 @@ import (
 )
 
 func TestProgressionPool_Minor(t *testing.T) {
-	pool := ProgressionPool("A", "minor_natural")
+	pool := progressionPool("A", "minor_natural")
 	if len(pool) == 0 {
 		t.Fatal("expected non-empty pool for A minor")
 	}
@@ -21,7 +21,7 @@ func TestProgressionPool_Minor(t *testing.T) {
 }
 
 func TestProgressionPool_Major(t *testing.T) {
-	pool := ProgressionPool("C", "major")
+	pool := progressionPool("C", "major")
 	if len(pool) == 0 {
 		t.Fatal("expected non-empty pool for C major")
 	}

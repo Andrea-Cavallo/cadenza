@@ -2,6 +2,7 @@ package theory
 
 import "fmt"
 
+// Key represents a parsed musical key with root note, mode, and scale type.
 type Key struct {
 	Root  string // "A", "D", "F#", "Bb"
 	Mode  string // "major", "minor"

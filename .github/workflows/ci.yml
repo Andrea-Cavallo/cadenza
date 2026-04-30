@@ -38,6 +38,15 @@ jobs:
       - name: Coverage report
         run: go tool cover -func=coverage.out
 
+      - name: Coverage gate (fail if < 80%)
+        run: |
+          total=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${total}%"
+          if [ "$(echo "$total < 80" | bc -l)" -eq 1 ]; then
+            echo "FAIL: Coverage ${total}% is below 80% threshold"
+            exit 1
+          fi
+
       - name: Build
         run: CGO_ENABLED=0 go build -o /dev/null ./cmd/cadenza/
 
@@ -74,7 +83,7 @@ jobs:
           cache: true
 
       - name: Install golangci-lint from source
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 
       - name: Run golangci-lint
         run: golangci-lint run ./...

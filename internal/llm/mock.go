@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// MockProvider is a test/offline stub that returns preconfigured responses.
 type MockProvider struct {
 	Response []byte
 	Err      error
