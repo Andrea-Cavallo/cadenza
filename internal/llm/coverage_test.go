@@ -173,26 +173,7 @@ func TestMainTestEnvIsClean(t *testing.T) {
 
 func TestOllamaGenerate_SuccessAndRequestShape(t *testing.T) {
 	var captured ollamaRequest
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/chat" {
-			t.Fatalf("unexpected path %q", r.URL.Path)
-		}
-		if got := r.Header.Get("Content-Type"); got != "application/json" {
-			t.Fatalf("unexpected content-type %q", got)
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read request body: %v", err)
-		}
-		if err := json.Unmarshal(body, &captured); err != nil {
-			t.Fatalf("unmarshal request body: %v", err)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"{\"pattern_type\":\"bassline\"}"}}`))
-	}))
+	server := httptest.NewServer(newOllamaSuccessHandler(t, &captured))
 	defer server.Close()
 
 	provider := NewOllamaProviderWithTimeout(server.URL, "qwen-test", time.Second)
@@ -274,26 +255,9 @@ func TestOpenAIGenerate_SuccessAndErrorBranches(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		var authHeader string
 		var captured openAIRequest
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader = r.Header.Get("Authorization")
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				t.Fatalf("read body: %v", err)
-			}
-			if err := json.Unmarshal(body, &captured); err != nil {
-				t.Fatalf("unmarshal request: %v", err)
-			}
-			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"ok\":true}"}}],"usage":{"total_tokens":42}}`))
-		}))
+		server := httptest.NewServer(newOpenAISuccessHandler(t, &authHeader, &captured))
 		defer server.Close()
-
-		provider := &OpenAIProvider{
-			apiKey:  "test-key",
-			model:   "gpt-test",
-			baseURL: server.URL,
-			client:  server.Client(),
-		}
+		provider := newOpenAIProvider(server)
 		resp, err := provider.Generate(context.Background(), GenerateRequest{
 			System: "system",
 			Messages: []Message{
@@ -333,7 +297,7 @@ func TestOpenAIGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &OpenAIProvider{apiKey: "test-key", model: "gpt-test", baseURL: server.URL, client: server.Client()}
+		provider := newOpenAIProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "openai api error (status 401)") {
 			t.Fatalf("expected status error, got %v", err)
@@ -346,7 +310,7 @@ func TestOpenAIGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &OpenAIProvider{apiKey: "test-key", model: "gpt-test", baseURL: server.URL, client: server.Client()}
+		provider := newOpenAIProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "openai error: rate limited (rate_limit)") {
 			t.Fatalf("expected api error, got %v", err)
@@ -359,7 +323,7 @@ func TestOpenAIGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &OpenAIProvider{apiKey: "test-key", model: "gpt-test", baseURL: server.URL, client: server.Client()}
+		provider := newOpenAIProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "no choices in response") {
 			t.Fatalf("expected no choices error, got %v", err)
@@ -387,7 +351,7 @@ func TestOpenAIGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &OpenAIProvider{apiKey: "test-key", model: "gpt-test", baseURL: server.URL, client: server.Client()}
+		provider := newOpenAIProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "unmarshal response") {
 			t.Fatalf("expected unmarshal error, got %v", err)
@@ -399,26 +363,9 @@ func TestGeminiGenerate_SuccessAndErrorBranches(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		var apiKeyHeader string
 		var captured geminiRequest
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			apiKeyHeader = r.Header.Get("x-goog-api-key")
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				t.Fatalf("read body: %v", err)
-			}
-			if err := json.Unmarshal(body, &captured); err != nil {
-				t.Fatalf("unmarshal request: %v", err)
-			}
-			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"ok\":true}"}]}}],"usageMetadata":{"totalTokenCount":17}}`))
-		}))
+		server := httptest.NewServer(newGeminiSuccessHandler(t, &apiKeyHeader, &captured))
 		defer server.Close()
-
-		provider := &GeminiProvider{
-			apiKey:  "gem-key",
-			model:   "gemini-test",
-			baseURL: server.URL,
-			client:  server.Client(),
-		}
+		provider := newGeminiProvider(server)
 		resp, err := provider.Generate(context.Background(), GenerateRequest{
 			System: "rules",
 			Messages: []Message{
@@ -459,7 +406,7 @@ func TestGeminiGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &GeminiProvider{apiKey: "gem-key", model: "gemini-test", baseURL: server.URL, client: server.Client()}
+		provider := newGeminiProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "gemini api error (status 403)") {
 			t.Fatalf("expected status error, got %v", err)
@@ -472,7 +419,7 @@ func TestGeminiGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &GeminiProvider{apiKey: "gem-key", model: "gemini-test", baseURL: server.URL, client: server.Client()}
+		provider := newGeminiProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "gemini error (code 429): quota") {
 			t.Fatalf("expected api error, got %v", err)
@@ -485,7 +432,7 @@ func TestGeminiGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &GeminiProvider{apiKey: "gem-key", model: "gemini-test", baseURL: server.URL, client: server.Client()}
+		provider := newGeminiProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "no content in response") {
 			t.Fatalf("expected no content error, got %v", err)
@@ -513,7 +460,7 @@ func TestGeminiGenerate_SuccessAndErrorBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		provider := &GeminiProvider{apiKey: "gem-key", model: "gemini-test", baseURL: server.URL, client: server.Client()}
+		provider := newGeminiProvider(server)
 		_, err := provider.Generate(context.Background(), GenerateRequest{})
 		if err == nil || !strings.Contains(err.Error(), "unmarshal response") {
 			t.Fatalf("expected unmarshal error, got %v", err)
@@ -701,4 +648,75 @@ func TestClaudeGenerate_ToolUseAndTextFallback(t *testing.T) {
 			t.Fatalf("unexpected text fallback payload %q", string(resp.RawJSON))
 		}
 	})
+}
+
+func newOllamaSuccessHandler(t *testing.T, captured *ollamaRequest) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Fatalf("unexpected content-type %q", got)
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if err := json.Unmarshal(body, captured); err != nil {
+			t.Fatalf("unmarshal request body: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"{\"pattern_type\":\"bassline\"}"}}`))
+	}
+}
+
+func newOpenAISuccessHandler(t *testing.T, authHeader *string, captured *openAIRequest) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		*authHeader = r.Header.Get("Authorization")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if err := json.Unmarshal(body, captured); err != nil {
+			t.Fatalf("unmarshal request: %v", err)
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"ok\":true}"}}],"usage":{"total_tokens":42}}`))
+	}
+}
+
+func newOpenAIProvider(server *httptest.Server) *OpenAIProvider {
+	return &OpenAIProvider{
+		apiKey:  "test-key",
+		model:   "gpt-test",
+		baseURL: server.URL,
+		client:  server.Client(),
+	}
+}
+
+func newGeminiSuccessHandler(t *testing.T, apiKeyHeader *string, captured *geminiRequest) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		*apiKeyHeader = r.Header.Get("x-goog-api-key")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if err := json.Unmarshal(body, captured); err != nil {
+			t.Fatalf("unmarshal request: %v", err)
+		}
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"ok\":true}"}]}}],"usageMetadata":{"totalTokenCount":17}}`))
+	}
+}
+
+func newGeminiProvider(server *httptest.Server) *GeminiProvider {
+	return &GeminiProvider{
+		apiKey:  "gem-key",
+		model:   "gemini-test",
+		baseURL: server.URL,
+		client:  server.Client(),
+	}
 }

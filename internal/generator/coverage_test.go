@@ -193,77 +193,9 @@ func TestSingleGenerator_GenerateBranches(t *testing.T) {
 		VariationSeed:    "seed-e",
 		Bars:             16,
 	}
-
-	t.Run("missing prompt", func(t *testing.T) {
-		g := NewGenerator(&llm.MockProvider{}, schema.NewValidator(), nil)
-		g.promptDir = filepath.Join(t.TempDir(), "missing")
-		if _, err := g.Generate(context.Background(), ctx, "bassline"); err == nil || !strings.Contains(err.Error(), "read prompt") {
-			t.Fatalf("expected prompt read error, got %v", err)
-		}
-	})
-
-	t.Run("cache hit bypasses provider", func(t *testing.T) {
-		tmp := t.TempDir()
-		c := cache.New(30, filepath.Join(tmp, "cache"))
-		g := NewGenerator(&llm.MockProvider{Err: errors.New("provider should not be called")}, schema.NewValidator(), c)
-		g.promptDir = filepath.Join(tmp, "prompts")
-		if err := os.MkdirAll(g.promptDir, 0o755); err != nil {
-			t.Fatalf("mkdir prompt dir: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(g.promptDir, "bassline_v1.md"), []byte("{{KEY}} {{MODE}} {{SCALE}} {{BPM}} {{SEED}} {{CHORD_PROGRESSION}} {{SCHEMA}}"), 0o644); err != nil {
-			t.Fatalf("write prompt: %v", err)
-		}
-
-		cachedSpec := offlineTemplate("bassline", ctx)
-		raw, err := json.Marshal(cachedSpec)
-		if err != nil {
-			t.Fatalf("marshal cached spec: %v", err)
-		}
-		cacheKeys := []string{g.provider.Name(), "bassline", ctx.Key.Root, ctx.Key.Mode, ctx.VariationSeed, hashContent([]byte("{{KEY}} {{MODE}} {{SCALE}} {{BPM}} {{SEED}} {{CHORD_PROGRESSION}} {{SCHEMA}}"))}
-		if err := c.Set(raw, cacheKeys...); err != nil {
-			t.Fatalf("seed cache: %v", err)
-		}
-
-		spec, err := g.Generate(context.Background(), ctx, "bassline")
-		if err != nil {
-			t.Fatalf("unexpected generate error: %v", err)
-		}
-		if spec.PatternType != "bassline" {
-			t.Fatalf("unexpected pattern type %q", spec.PatternType)
-		}
-	})
-
-	t.Run("invalid cached entry falls back to provider", func(t *testing.T) {
-		tmp := t.TempDir()
-		c := cache.New(30, filepath.Join(tmp, "cache"))
-		validSpec := offlineTemplate("bassline", ctx)
-		raw, err := json.Marshal(validSpec)
-		if err != nil {
-			t.Fatalf("marshal spec: %v", err)
-		}
-		g := NewGenerator(&llm.MockProvider{Response: raw}, schema.NewValidator(), c)
-		g.promptDir = filepath.Join(tmp, "prompts")
-		if err := os.MkdirAll(g.promptDir, 0o755); err != nil {
-			t.Fatalf("mkdir prompt dir: %v", err)
-		}
-		prompt := "{{KEY}} {{MODE}} {{SCALE}} {{BPM}} {{SEED}} {{CHORD_PROGRESSION}} {{SCHEMA}}"
-		if err := os.WriteFile(filepath.Join(g.promptDir, "bassline_v1.md"), []byte(prompt), 0o644); err != nil {
-			t.Fatalf("write prompt: %v", err)
-		}
-
-		cacheKeys := []string{g.provider.Name(), "bassline", ctx.Key.Root, ctx.Key.Mode, ctx.VariationSeed, hashContent([]byte(prompt))}
-		if err := c.Set([]byte("not-json"), cacheKeys...); err != nil {
-			t.Fatalf("seed bad cache entry: %v", err)
-		}
-
-		spec, err := g.Generate(context.Background(), ctx, "bassline")
-		if err != nil {
-			t.Fatalf("unexpected generate error: %v", err)
-		}
-		if spec.VariationSeed != ctx.VariationSeed {
-			t.Fatalf("expected provider fallback result, got seed %q", spec.VariationSeed)
-		}
-	})
+	testSingleGeneratorMissingPrompt(t, ctx)
+	testSingleGeneratorCacheHit(t, ctx)
+	testSingleGeneratorInvalidCacheFallback(t, ctx)
 }
 
 func TestOfflineHelpers_AdditionalBranches(t *testing.T) {
@@ -274,56 +206,10 @@ func TestOfflineHelpers_AdditionalBranches(t *testing.T) {
 		hash[i] = byte(i)
 	}
 
-	if got := progressionString(theory.ChordProgression{}); got != "" {
-		t.Fatalf("expected empty progression string, got %q", got)
-	}
-	if got := progressionStringDetailed(theory.ChordProgression{}); got != "" {
-		t.Fatalf("expected empty detailed progression string, got %q", got)
-	}
-
-	if got := approachNote("A", minorKey); got == "" || got == "A3" {
-		t.Fatalf("unexpected approach note %q", got)
-	}
-	if got := approachNote("?", minorKey); got != "?" {
-		t.Fatalf("expected invalid root fallback, got %q", got)
-	}
-
-	if got := chordFifth(theory.ProgressionChord{Root: "?", Quality: "bad"}); got != "?" {
-		t.Fatalf("expected root fallback, got %q", got)
-	}
-
-	if got := closestChordTone([]string{"?"}, []string{"A"}, 0); got != "?" {
-		t.Fatalf("expected first chord tone fallback, got %q", got)
-	}
-
-	if prof := chooseBassProfile(majorKey, 110, hash); prof == "" {
-		t.Fatal("expected low-bpm bass profile")
-	}
-	if prof := chooseBassProfile(minorKey, 130, hash); prof != "bass_techno_driving" {
-		t.Fatalf("expected minor high-bpm driving bass, got %q", prof)
-	}
-	if prof := chooseArpProfile(majorKey, 110, hash); prof != "arp_flowing" {
-		t.Fatalf("expected flowing arp, got %q", prof)
-	}
-	if prof := chooseArpProfile(minorKey, 125, hash); prof == "" {
-		t.Fatal("expected minor mid-bpm arp profile")
-	}
-	if prof := chooseMelodyProfile(majorKey, 110, hash); prof != "melody_expressive" {
-		t.Fatalf("expected expressive melody, got %q", prof)
-	}
-	if prof := chooseMelodyProfile(majorKey, 126, hash); prof == "" {
-		t.Fatal("expected major fast melody profile")
-	}
-
-	if len(buildBassEvolution(129, minorKey)) != 4 {
-		t.Fatal("expected 4 bass evolution phases")
-	}
-	if len(buildHypnoticMotif(hash, 5, []string{"A", "B", "C", "D", "E", "F", "G"})) != 5 {
-		t.Fatal("expected motif length 5")
-	}
-	if len(seedHash("abc")) != 32 {
-		t.Fatal("expected sha256 hash bytes")
-	}
+	assertOfflineStringHelpers(t, minorKey)
+	assertOfflineChordHelpers(t, minorKey)
+	assertOfflineProfileSelection(t, minorKey, majorKey, hash)
+	assertOfflineSequenceBuilders(t, minorKey, hash)
 }
 
 func TestDrumHelpers_DirectBranches(t *testing.T) {
@@ -341,5 +227,149 @@ func TestDrumHelpers_DirectBranches(t *testing.T) {
 	}
 	if events := appendOpenHHEvents(nil, 0, 6, 118, 32, 16); len(events) != 1 || events[0].Velocity != 75 {
 		t.Fatalf("expected open hat branch, got %#v", events)
+	}
+}
+
+const generatorPromptTemplate = "{{KEY}} {{MODE}} {{SCALE}} {{BPM}} {{SEED}} {{CHORD_PROGRESSION}} {{SCHEMA}}"
+
+func testSingleGeneratorMissingPrompt(t *testing.T, ctx MusicContext) {
+	t.Helper()
+	t.Run("missing prompt", func(t *testing.T) {
+		g := NewGenerator(&llm.MockProvider{}, schema.NewValidator(), nil)
+		g.promptDir = filepath.Join(t.TempDir(), "missing")
+		if _, err := g.Generate(context.Background(), ctx, "bassline"); err == nil || !strings.Contains(err.Error(), "read prompt") {
+			t.Fatalf("expected prompt read error, got %v", err)
+		}
+	})
+}
+
+func testSingleGeneratorCacheHit(t *testing.T, ctx MusicContext) {
+	t.Helper()
+	t.Run("cache hit bypasses provider", func(t *testing.T) {
+		tmp := t.TempDir()
+		c := cache.New(30, filepath.Join(tmp, "cache"))
+		g := NewGenerator(&llm.MockProvider{Err: errors.New("provider should not be called")}, schema.NewValidator(), c)
+		g.promptDir = filepath.Join(tmp, "prompts")
+		writeGeneratorPrompt(t, g.promptDir, generatorPromptTemplate)
+
+		cachedSpec := offlineTemplate("bassline", ctx)
+		raw, err := json.Marshal(cachedSpec)
+		if err != nil {
+			t.Fatalf("marshal cached spec: %v", err)
+		}
+		if err := c.Set(raw, generatorCacheKeys(g, ctx, generatorPromptTemplate)...); err != nil {
+			t.Fatalf("seed cache: %v", err)
+		}
+
+		spec, err := g.Generate(context.Background(), ctx, "bassline")
+		if err != nil {
+			t.Fatalf("unexpected generate error: %v", err)
+		}
+		if spec.PatternType != "bassline" {
+			t.Fatalf("unexpected pattern type %q", spec.PatternType)
+		}
+	})
+}
+
+func testSingleGeneratorInvalidCacheFallback(t *testing.T, ctx MusicContext) {
+	t.Helper()
+	t.Run("invalid cached entry falls back to provider", func(t *testing.T) {
+		tmp := t.TempDir()
+		c := cache.New(30, filepath.Join(tmp, "cache"))
+		validSpec := offlineTemplate("bassline", ctx)
+		raw, err := json.Marshal(validSpec)
+		if err != nil {
+			t.Fatalf("marshal spec: %v", err)
+		}
+		g := NewGenerator(&llm.MockProvider{Response: raw}, schema.NewValidator(), c)
+		g.promptDir = filepath.Join(tmp, "prompts")
+		writeGeneratorPrompt(t, g.promptDir, generatorPromptTemplate)
+
+		if err := c.Set([]byte("not-json"), generatorCacheKeys(g, ctx, generatorPromptTemplate)...); err != nil {
+			t.Fatalf("seed bad cache entry: %v", err)
+		}
+
+		spec, err := g.Generate(context.Background(), ctx, "bassline")
+		if err != nil {
+			t.Fatalf("unexpected generate error: %v", err)
+		}
+		if spec.VariationSeed != ctx.VariationSeed {
+			t.Fatalf("expected provider fallback result, got seed %q", spec.VariationSeed)
+		}
+	})
+}
+
+func writeGeneratorPrompt(t *testing.T, promptDir, prompt string) {
+	t.Helper()
+	if err := os.MkdirAll(promptDir, 0o755); err != nil {
+		t.Fatalf("mkdir prompt dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(promptDir, "bassline_v1.md"), []byte(prompt), 0o644); err != nil {
+		t.Fatalf("write prompt: %v", err)
+	}
+}
+
+func generatorCacheKeys(g *SingleGenerator, ctx MusicContext, prompt string) []string {
+	return []string{g.provider.Name(), "bassline", ctx.Key.Root, ctx.Key.Mode, ctx.VariationSeed, hashContent([]byte(prompt))}
+}
+
+func assertOfflineStringHelpers(t *testing.T, minorKey theory.Key) {
+	t.Helper()
+	if got := progressionString(theory.ChordProgression{}); got != "" {
+		t.Fatalf("expected empty progression string, got %q", got)
+	}
+	if got := progressionStringDetailed(theory.ChordProgression{}); got != "" {
+		t.Fatalf("expected empty detailed progression string, got %q", got)
+	}
+	if got := approachNote("A", minorKey); got == "" || got == "A3" {
+		t.Fatalf("unexpected approach note %q", got)
+	}
+	if got := approachNote("?", minorKey); got != "?" {
+		t.Fatalf("expected invalid root fallback, got %q", got)
+	}
+}
+
+func assertOfflineChordHelpers(t *testing.T, minorKey theory.Key) {
+	t.Helper()
+	if got := chordFifth(theory.ProgressionChord{Root: "?", Quality: "bad"}); got != "?" {
+		t.Fatalf("expected root fallback, got %q", got)
+	}
+	if got := closestChordTone([]string{"?"}, []string{"A"}, 0); got != "?" {
+		t.Fatalf("expected first chord tone fallback, got %q", got)
+	}
+}
+
+func assertOfflineProfileSelection(t *testing.T, minorKey, majorKey theory.Key, hash []byte) {
+	t.Helper()
+	if chooseBassProfile(majorKey, 110, hash) == "" {
+		t.Fatal("expected low-bpm bass profile")
+	}
+	if prof := chooseBassProfile(minorKey, 130, hash); prof != "bass_techno_driving" {
+		t.Fatalf("expected minor high-bpm driving bass, got %q", prof)
+	}
+	if prof := chooseArpProfile(majorKey, 110, hash); prof != "arp_flowing" {
+		t.Fatalf("expected flowing arp, got %q", prof)
+	}
+	if chooseArpProfile(minorKey, 125, hash) == "" {
+		t.Fatal("expected minor mid-bpm arp profile")
+	}
+	if prof := chooseMelodyProfile(majorKey, 110, hash); prof != "melody_expressive" {
+		t.Fatalf("expected expressive melody, got %q", prof)
+	}
+	if chooseMelodyProfile(majorKey, 126, hash) == "" {
+		t.Fatal("expected major fast melody profile")
+	}
+}
+
+func assertOfflineSequenceBuilders(t *testing.T, minorKey theory.Key, hash []byte) {
+	t.Helper()
+	if len(buildBassEvolution(129, minorKey)) != 4 {
+		t.Fatal("expected 4 bass evolution phases")
+	}
+	if len(buildHypnoticMotif(hash, 5, []string{"A", "B", "C", "D", "E", "F", "G"})) != 5 {
+		t.Fatal("expected motif length 5")
+	}
+	if len(seedHash("abc")) != 32 {
+		t.Fatal("expected sha256 hash bytes")
 	}
 }

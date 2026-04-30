@@ -58,38 +58,9 @@ func TestLLMIDICLIHelpers(t *testing.T) {
 }
 
 func TestLLMIDICLIFlow(t *testing.T) {
-	t.Run("select mode offline", func(t *testing.T) {
-		var cfg cliConfig
-		withLLMIDIInput("2\n", func() {
-			if ok := selectMode(&cfg); !ok || !cfg.NoLLM {
-				t.Fatalf("unexpected mode result ok=%v cfg=%+v", ok, cfg)
-			}
-		})
-	})
-
-	t.Run("select engine ollama", func(t *testing.T) {
-		cfg := cliConfig{}
-		withLLMIDIInput("2\nmymodel\n", func() {
-			if ok := selectLLMEngine(&cfg); !ok {
-				t.Fatal("expected engine selection to pass")
-			}
-		})
-		if cfg.ProviderName != "ollama" || cfg.Model != "mymodel" {
-			t.Fatalf("unexpected engine cfg %+v", cfg)
-		}
-	})
-
-	t.Run("tempo key and interactive run", func(t *testing.T) {
-		withLLMIDIInput("2\n122\nAm\nout\ny\n", func() {
-			cfg, ok := runInteractiveCLI()
-			if !ok {
-				t.Fatal("expected interactive flow ok")
-			}
-			if !cfg.NoLLM || cfg.BPM != 122 || cfg.Key != "Am" || cfg.OutputDir != "out" {
-				t.Fatalf("unexpected cfg %+v", cfg)
-			}
-		})
-	})
+	testLLMIDIModeOffline(t)
+	testLLMIDIEngineOllama(t)
+	testLLMIDIInteractiveRun(t)
 }
 
 func TestLLMIDIBannerAndSummary(t *testing.T) {
@@ -100,5 +71,57 @@ func TestLLMIDIBannerAndSummary(t *testing.T) {
 		printSummary(cliConfig{BPM: 122, Key: "Am", NoLLM: true, OutputDir: "output"})
 	}); !strings.Contains(out, "OUTPUT") {
 		t.Fatalf("unexpected summary output %q", out)
+	}
+}
+
+func testLLMIDIModeOffline(t *testing.T) {
+	t.Helper()
+	t.Run("select mode offline", func(t *testing.T) {
+		var cfg cliConfig
+		withLLMIDIInput("2\n", func() {
+			assertLLMIDIOfflineMode(t, &cfg, selectMode(&cfg))
+		})
+	})
+}
+
+func testLLMIDIEngineOllama(t *testing.T) {
+	t.Helper()
+	t.Run("select engine ollama", func(t *testing.T) {
+		cfg := cliConfig{}
+		withLLMIDIInput("2\nmymodel\n", func() {
+			if !selectLLMEngine(&cfg) {
+				t.Fatal("expected engine selection to pass")
+			}
+		})
+		if cfg.ProviderName != "ollama" || cfg.Model != "mymodel" {
+			t.Fatalf("unexpected engine cfg %+v", cfg)
+		}
+	})
+}
+
+func testLLMIDIInteractiveRun(t *testing.T) {
+	t.Helper()
+	t.Run("tempo key and interactive run", func(t *testing.T) {
+		withLLMIDIInput("2\n122\nAm\nout\ny\n", func() {
+			cfg, ok := runInteractiveCLI()
+			assertLLMIDIInteractiveConfig(t, cfg, ok)
+		})
+	})
+}
+
+func assertLLMIDIOfflineMode(t *testing.T, cfg *cliConfig, ok bool) {
+	t.Helper()
+	if !ok || !cfg.NoLLM {
+		t.Fatalf("unexpected mode result ok=%v cfg=%+v", ok, *cfg)
+	}
+}
+
+func assertLLMIDIInteractiveConfig(t *testing.T, cfg cliConfig, ok bool) {
+	t.Helper()
+	if !ok {
+		t.Fatal("expected interactive flow ok")
+	}
+	if !cfg.NoLLM || cfg.BPM != 122 || cfg.Key != "Am" || cfg.OutputDir != "out" {
+		t.Fatalf("unexpected cfg %+v", cfg)
 	}
 }

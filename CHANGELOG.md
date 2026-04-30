@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Reduced validator and dev-mode flag parsing complexity by extracting focused helper functions.
 - Run the Docker smoke test container with the runner UID/GID so mounted `output/` remains writable without restoring world-writable permissions.
+- Pinned `JetBrains/qodana-action` in the Qodana workflow to a full commit SHA to satisfy dependency pinning security checks.
+- Refactored CLI, generator, and LLM coverage tests into smaller helpers to clear remaining Sonar cognitive-complexity and Go idiom warnings without reducing coverage.
 
 ### Removed
 - **Dead code cleanup** — Removed 480+ lines of unused code identified through static analysis

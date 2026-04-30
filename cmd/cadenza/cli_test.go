@@ -87,65 +87,12 @@ func TestCLIHelperFunctions(t *testing.T) {
 }
 
 func TestCLIFlowHelpers(t *testing.T) {
-	t.Run("select mode", func(t *testing.T) {
-		var cfg cliConfig
-		withInput("2\n", func() {
-			if ok := selectMode(&cfg); !ok || !cfg.NoLLM {
-				t.Fatalf("expected offline mode selection, got ok=%v cfg=%+v", ok, cfg)
-			}
-		})
-	})
-
-	t.Run("select mode quit", func(t *testing.T) {
-		var cfg cliConfig
-		withInput("q\n", func() {
-			if ok := selectMode(&cfg); ok {
-				t.Fatal("expected quit selection to return false")
-			}
-		})
-	})
-
-	t.Run("select llm engine fallback to offline", func(t *testing.T) {
-		t.Setenv("ANTHROPIC_API_KEY", "")
-		cfg := cliConfig{}
-		withInput("1\ny\n", func() {
-			if ok := selectLLMEngine(&cfg); !ok || !cfg.NoLLM || cfg.ProviderName != "claude" {
-				t.Fatalf("unexpected cfg after fallback: ok=%v cfg=%+v", ok, cfg)
-			}
-		})
-	})
-
-	t.Run("select llm engine ollama", func(t *testing.T) {
-		cfg := cliConfig{}
-		withInput("2\nllama3\n", func() {
-			if ok := selectLLMEngine(&cfg); !ok {
-				t.Fatal("expected ollama selection to succeed")
-			}
-		})
-		if cfg.ProviderName != "ollama" || cfg.Model != "llama3" {
-			t.Fatalf("unexpected ollama cfg %+v", cfg)
-		}
-	})
-
-	t.Run("select tempo", func(t *testing.T) {
-		var cfg cliConfig
-		withInput("200\n123\n", func() {
-			selectTempo(&cfg)
-		})
-		if cfg.BPM != 123 {
-			t.Fatalf("expected bpm 123, got %v", cfg.BPM)
-		}
-	})
-
-	t.Run("select key", func(t *testing.T) {
-		var cfg cliConfig
-		withInput("bad\nAm\n", func() {
-			selectKey(&cfg)
-		})
-		if cfg.Key != "Am" {
-			t.Fatalf("expected key Am, got %q", cfg.Key)
-		}
-	})
+	testSelectModeOffline(t)
+	testSelectModeQuit(t)
+	testSelectLLMEngineFallback(t)
+	testSelectLLMEngineOllama(t)
+	testSelectTempo(t)
+	testSelectKey(t)
 }
 
 func TestPrintSummaryAndBanner(t *testing.T) {
@@ -234,7 +181,95 @@ func TestProviderAndLoggerHelpers(t *testing.T) {
 	cfg.Logging.Level = "debug"
 	cfg.Logging.Format = "text"
 	setupLogger(outDir, cfg)
-	if _, err := os.Stat(filepath.Join(outDir, "cadenza.log")); err != nil {
+	if _, err = os.Stat(filepath.Join(outDir, "cadenza.log")); err != nil {
 		t.Fatalf("expected log file to exist: %v", err)
+	}
+}
+
+func testSelectModeOffline(t *testing.T) {
+	t.Helper()
+	t.Run("select mode", func(t *testing.T) {
+		var cfg cliConfig
+		withInput("2\n", func() {
+			assertOfflineModeSelection(t, &cfg, selectMode(&cfg))
+		})
+	})
+}
+
+func testSelectModeQuit(t *testing.T) {
+	t.Helper()
+	t.Run("select mode quit", func(t *testing.T) {
+		var cfg cliConfig
+		withInput("q\n", func() {
+			if selectMode(&cfg) {
+				t.Fatal("expected quit selection to return false")
+			}
+		})
+	})
+}
+
+func testSelectLLMEngineFallback(t *testing.T) {
+	t.Helper()
+	t.Run("select llm engine fallback to offline", func(t *testing.T) {
+		t.Setenv("ANTHROPIC_API_KEY", "")
+		cfg := cliConfig{}
+		withInput("1\ny\n", func() {
+			assertClaudeOfflineFallback(t, &cfg, selectLLMEngine(&cfg))
+		})
+	})
+}
+
+func testSelectLLMEngineOllama(t *testing.T) {
+	t.Helper()
+	t.Run("select llm engine ollama", func(t *testing.T) {
+		cfg := cliConfig{}
+		withInput("2\nllama3\n", func() {
+			if !selectLLMEngine(&cfg) {
+				t.Fatal("expected ollama selection to succeed")
+			}
+		})
+		if cfg.ProviderName != "ollama" || cfg.Model != "llama3" {
+			t.Fatalf("unexpected ollama cfg %+v", cfg)
+		}
+	})
+}
+
+func testSelectTempo(t *testing.T) {
+	t.Helper()
+	t.Run("select tempo", func(t *testing.T) {
+		var cfg cliConfig
+		withInput("200\n123\n", func() {
+			selectTempo(&cfg)
+		})
+		if cfg.BPM != 123 {
+			t.Fatalf("expected bpm 123, got %v", cfg.BPM)
+		}
+	})
+}
+
+func testSelectKey(t *testing.T) {
+	t.Helper()
+	t.Run("select key", func(t *testing.T) {
+		var cfg cliConfig
+		withInput("bad\nAm\n", func() {
+			selectKey(&cfg)
+		})
+		if cfg.Key != "Am" {
+			t.Fatalf("expected key Am, got %q", cfg.Key)
+		}
+	})
+}
+
+func assertOfflineModeSelection(t *testing.T, cfg *cliConfig, ok bool) {
+	t.Helper()
+	if !ok || !cfg.NoLLM {
+		t.Fatalf("expected offline mode selection, got ok=%v cfg=%+v", ok, *cfg)
+	}
+}
+
+func assertClaudeOfflineFallback(t *testing.T, cfg *cliConfig, ok bool) {
+	t.Helper()
+	if !ok || !cfg.NoLLM || cfg.ProviderName != "claude" {
+		t.Fatalf("unexpected cfg after fallback: ok=%v cfg=%+v", ok, *cfg)
 	}
 }
