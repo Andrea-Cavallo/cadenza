@@ -48,3 +48,5 @@ docs/
 
 # Claude Code / AI
 .claude/
+# Git worktrees
+.worktrees/
