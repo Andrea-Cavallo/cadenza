@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,6 +166,20 @@ func TestRunGenerationAndSingleGeneration(t *testing.T) {
 			t.Fatalf("unexpected custom progression generation error: %v", err)
 		}
 	})
+
+	t.Run("json dry run output", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		cfg.DryRun = true
+		cfg.JSONOutput = true
+		out := captureStdout(t, func() { runGeneration(cfg) })
+		var summary generationJSONSummary
+		if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &summary); err != nil {
+			t.Fatalf("json output should parse: %v\n%s", err, out)
+		}
+		if !summary.DryRun || summary.Key != "Am" || summary.Seed == "" {
+			t.Fatalf("unexpected json summary %+v", summary)
+		}
+	})
 }
 
 func TestRunFromSpecAndWatchMode(t *testing.T) {
@@ -325,6 +340,48 @@ func TestHandlePostRunAction(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("same motifs new key then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		lastRun = lastRunInfo{Seed: "123", ProgCLI: "Am-F-C-G", BPM: 122, Key: "Am"}
+		withInput("9\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after same motifs new key")
+			}
+		})
+		files, _ := filepath.Glob(filepath.Join(cfg.OutputDir, "*.mid"))
+		if len(files) != 3 {
+			t.Fatalf("expected 3 midi files after transposed rerun, got %d", len(files))
+		}
+	})
+
+	t.Run("regenerate single part then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		lastRun = lastRunInfo{Seed: "123", ProgCLI: "Am-F-C-G", BPM: 122, Key: "Am"}
+		withInput("b\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after single part")
+			}
+		})
+		files, _ := filepath.Glob(filepath.Join(cfg.OutputDir, "*bassline*.mid"))
+		if len(files) != 1 {
+			t.Fatalf("expected one regenerated bassline file, got %d", len(files))
+		}
+	})
+
+	t.Run("lock progression then same setup", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		lastRun = lastRunInfo{Seed: "123", ProgCLI: "Am-F-C-G", BPM: 122, Key: "Am"}
+		withInput("l\n2\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after lock progression rerun")
+			}
+		})
+		files, _ := filepath.Glob(filepath.Join(cfg.OutputDir, "*.mid"))
+		if len(files) != 3 {
+			t.Fatalf("expected 3 midi files after locked rerun, got %d", len(files))
+		}
+	})
 }
 
 func TestProgressionToCLIString(t *testing.T) {
@@ -347,6 +404,93 @@ func TestClampBPM(t *testing.T) {
 	}
 	if clampBPM(122) != 122 {
 		t.Fatal("expected 122 unchanged")
+	}
+}
+
+func TestPostRunHelpers(t *testing.T) {
+	if got := adjacentKey("Am"); got != "Em" {
+		t.Fatalf("expected Am adjacent key Em, got %q", got)
+	}
+	if got := adjacentKey("G-mixolydian"); got != "D-mixolydian" {
+		t.Fatalf("expected G-mixolydian adjacent key D-mixolydian, got %q", got)
+	}
+	if got := adjacentKey("bad-key"); got != "bad-key" {
+		t.Fatalf("invalid adjacent key should stay unchanged, got %q", got)
+	}
+	if got := transposeProgressionCLI("Am-F-C-G", "Am", "Em"); got != "Em-C-G-D" {
+		t.Fatalf("unexpected transposed progression %q", got)
+	}
+	if got := transposeProgressionCLI("Am-F-C-G", "bad-key", "Em"); got != "Am-F-C-G" {
+		t.Fatalf("invalid source key should keep progression, got %q", got)
+	}
+	if got := transposeProgressionCLI("Am-nope-C-G", "Am", "Em"); got != "Em-nope-G-D" {
+		t.Fatalf("invalid chord should keep progression, got %q", got)
+	}
+	if seed, ok := seedPtrFromString("42"); !ok || *seed != 42 {
+		t.Fatalf("expected seed 42, got %v ok=%v", seed, ok)
+	}
+	if _, ok := seedPtrFromString("nope"); ok {
+		t.Fatal("expected invalid seed parse to fail")
+	}
+}
+
+func TestRunSinglePartGeneration(t *testing.T) {
+	cfg := testCLIConfig(t.TempDir())
+	cfg.Progression = "Am-F-C-G"
+	if err := runSinglePartGeneration(cfg, "melody", "777", 1); err != nil {
+		t.Fatalf("single part generation failed: %v", err)
+	}
+	files, _ := filepath.Glob(filepath.Join(cfg.OutputDir, "*melody*.mid"))
+	if len(files) != 1 {
+		t.Fatalf("expected one melody file, got %d", len(files))
+	}
+	if err := runSinglePartGeneration(cfg, "nope", "777", 1); err == nil {
+		t.Fatal("expected invalid part to fail")
+	}
+
+	cfg = testCLIConfig(t.TempDir())
+	cfg.JSONOutput = true
+	cfg.Progression = "Am-F-C-G"
+	out := captureStdout(t, func() {
+		if err := runSinglePartGeneration(cfg, "bassline", "888", 1); err != nil {
+			t.Fatalf("json single part generation failed: %v", err)
+		}
+	})
+	var summary generationJSONSummary
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &summary); err != nil {
+		t.Fatalf("json single part output should parse: %v\n%s", err, out)
+	}
+	if summary.Part != "bassline" || len(summary.Files) != 1 {
+		t.Fatalf("unexpected single part summary %+v", summary)
+	}
+}
+
+func TestPrintGenerationJSONFullSummary(t *testing.T) {
+	cfg := testCLIConfig(t.TempDir())
+	cfg.SingleFile = true
+	cfg.Drums = true
+	cfg.ProviderName = "ollama"
+	cfg.Model = "qwen2.5:7b"
+	files := []string{filepath.Join(cfg.OutputDir, "bass.mid"), filepath.Join(cfg.OutputDir, "arp.mid")}
+
+	out := captureStdout(t, func() {
+		printGenerationJSON(cfg, "seed-z", "Am-F-C-G", files, false, "melody")
+	})
+	var summary generationJSONSummary
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &summary); err != nil {
+		t.Fatalf("json summary should parse: %v\n%s", err, out)
+	}
+	if summary.Seed != "seed-z" || summary.Progression != "Am-F-C-G" || summary.Part != "melody" {
+		t.Fatalf("unexpected summary %+v", summary)
+	}
+	if summary.Provider != "ollama" || !strings.Contains(summary.Reproduce, "--no-llm") {
+		t.Fatalf("missing config fields in summary %+v", summary)
+	}
+	if len(summary.Files) != 2 || !filepath.IsAbs(summary.Files[0]) {
+		t.Fatalf("expected absolute files in summary %+v", summary.Files)
+	}
+	if !strings.Contains(summary.Reproduce, "--seed seed-z") {
+		t.Fatalf("expected reproduce command to include seed, got %q", summary.Reproduce)
 	}
 }
 

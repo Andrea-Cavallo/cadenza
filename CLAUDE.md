@@ -41,7 +41,8 @@ User (BPM + Key)
 | `internal/generator/` | Chord progression gen + single/multi-pattern generation + offline templates + LLM cache integration |
 | `internal/midi/` | MIDI Type-0 file writer with priority-based event ordering |
 | `internal/cache/` | SHA256-keyed disk cache (30-day TTL) |
-| `prompts/` | LLM prompt templates (bassline, arpeggio, melody) |
+| `internal/prompts/` | LLM prompt templates (bassline, arpeggio, melody) — embedded into binary via `//go:embed` |
+| `internal/models/` | Model catalog (`models.yaml`, embedded) — add/remove models without recompiling; override with `~/.cadenza/models.yaml` or `./models.yaml` |
 
 ## Conventions
 

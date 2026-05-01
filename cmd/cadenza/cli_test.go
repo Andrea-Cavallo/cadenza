@@ -167,6 +167,34 @@ func TestPrintSummaryAndBanner(t *testing.T) {
 	}
 }
 
+func TestOutputDirHelpers(t *testing.T) {
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, "nested")
+	if err := ensureWritableDir(dir); err != nil {
+		t.Fatalf("expected writable dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".cadenza-write-test")); !os.IsNotExist(err) {
+		t.Fatalf("write probe should be removed, stat err=%v", err)
+	}
+
+	filePath := filepath.Join(tmp, "file")
+	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write blocker file: %v", err)
+	}
+	if err := ensureWritableDir(filepath.Join(filePath, "child")); err == nil {
+		t.Fatal("expected nested path under file to fail")
+	}
+
+	cfg := cliConfig{}
+	outDir := filepath.Join(tmp, "chosen")
+	withInput(outDir+"\n", func() {
+		captureStdout(t, func() { chooseOutputDir(&cfg) })
+	})
+	if cfg.OutputDir != outDir {
+		t.Fatalf("expected chosen output dir %q, got %q", outDir, cfg.OutputDir)
+	}
+}
+
 func TestRunInteractiveCLI_OfflineHappyPath(t *testing.T) {
 	// flow: no quick start → skip preset → offline mode → skip energy → 122 BPM → Am → export-dir → confirm
 	withInput("n\ns\n2\n\n122\nAm\nexport-dir\ny\n", func() {
@@ -310,7 +338,7 @@ func testSelectLLMEngineFallback(t *testing.T) {
 	t.Run("select llm engine fallback to offline", func(t *testing.T) {
 		t.Setenv("ANTHROPIC_API_KEY", "")
 		cfg := cliConfig{}
-		withInput("1\ny\n", func() {
+		withInput("1\n\ny\n", func() {
 			assertClaudeOfflineFallback(t, &cfg, selectLLMEngine(&cfg))
 		})
 	})
@@ -424,6 +452,21 @@ func TestProviderHelpers(t *testing.T) {
 	}
 	if got := providerSetupHint("unknown"); got != "" {
 		t.Fatalf("expected empty for unknown provider hint, got %q", got)
+	}
+
+	appCfg := &config.AppConfig{}
+	appCfg.LLM.Model = "custom-claude"
+	models := map[string]string{
+		"claude":  "custom-claude",
+		"ollama":  "qwen2.5:7b",
+		"openai":  "gpt-4o",
+		"gemini":  "gemini-2.0-flash-exp",
+		"unknown": "custom-claude",
+	}
+	for provider, want := range models {
+		if got := resolveDefaultModel(provider, appCfg); got != want {
+			t.Fatalf("resolveDefaultModel(%q) = %q, want %q", provider, got, want)
+		}
 	}
 }
 

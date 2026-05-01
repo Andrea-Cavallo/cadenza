@@ -28,11 +28,16 @@ type lastRunInfo struct {
 	ProgCLI string // "Am-F-C-G" format for --progression flag
 	BPM     float64
 	Key     string
+	Files   []string
 }
 
 var lastRun lastRunInfo
 
 func main() {
+	if handleConfigCommand(os.Args[1:]) {
+		return
+	}
+
 	// Load config from cadenza.yaml / env vars via Viper
 	appCfg, cfgErr := config.Load()
 	if cfgErr != nil {
@@ -72,10 +77,11 @@ func main() {
 	offlineStyleFlag := flag.String("offline-style", "", "Offline pattern style: hypnotic, driving, minimal, melodic")
 	presetFlag := flag.String("preset", "", "Genre preset: progressive-warmup, peak-time-driver, afterhours-hypnotic, festival-melodic")
 
-	watchFlag          := flag.Bool("watch", false, "Watch mode: stay in loop, Enter generates new variation, 'q' exits")
-	dryRunFlag         := flag.Bool("dry-run", false, "Execute pipeline without writing files, print summary")
-	devFlag            := flag.Bool("dev", false, "Interactive dev mode REPL")
-	doctorFlag         := flag.Bool("doctor", false, "Run diagnostics: Go version, API keys, Ollama, output directory")
+	watchFlag := flag.Bool("watch", false, "Watch mode: stay in loop, Enter generates new variation, 'q' exits")
+	dryRunFlag := flag.Bool("dry-run", false, "Execute pipeline without writing files, print summary")
+	jsonFlag := flag.Bool("json", false, "Print machine-readable JSON generation summaries to stdout")
+	devFlag := flag.Bool("dev", false, "Interactive dev mode REPL")
+	doctorFlag := flag.Bool("doctor", false, "Run diagnostics: Go version, API keys, Ollama, output directory")
 	nonInteractiveFlag := flag.Bool("non-interactive", false, "Non-interactive mode: require --bpm and --key, skip TUI")
 
 	flag.Parse()
@@ -139,6 +145,7 @@ func main() {
 		}()
 		presetCfg.Drums = *drumsFlag
 		presetCfg.DryRun = *dryRunFlag
+		presetCfg.JSONOutput = *jsonFlag
 		if presetCfg.Model == "" {
 			presetCfg.Model = resolveDefaultModel(presetCfg.ProviderName, appCfg)
 		}
@@ -179,6 +186,7 @@ func main() {
 			DumpSpec:     *dumpSpecFlag,
 			FromSpec:     *fromSpecFlag,
 			DryRun:       *dryRunFlag,
+			JSONOutput:   *jsonFlag,
 			OfflineStyle: *offlineStyleFlag,
 		}
 		if cfg.Model == "" {
@@ -219,6 +227,11 @@ func handlePostRunAction(cfg cliConfig) bool {
 		fmt.Printf("  %s[6]%s  Slower  (-6 BPM)\n", ansiYellow+ansiBold, ansiReset)
 		fmt.Printf("  %s[7]%s  Busier  (driving style)\n", ansiYellow+ansiBold, ansiReset)
 		fmt.Printf("  %s[8]%s  Sparser (hypnotic style)\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[9]%s  Same motifs, new key\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[b]%s  Regenerate bassline only\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[a]%s  Regenerate arpeggio only\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[m]%s  Regenerate melody only\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[l]%s  Lock progression mode\n", ansiYellow+ansiBold, ansiReset)
 		fmt.Printf("  %s[q]%s  Exit\n\n", ansiYellow+ansiBold, ansiReset)
 
 		switch strings.ToLower(ask("Choose")) {
@@ -289,12 +302,44 @@ func handlePostRunAction(cfg cliConfig) bool {
 			fmt.Printf("\n  %s-> Hypnotic style (sparse, meditative patterns)%s\n\n", ansiGreen, ansiReset)
 			runGeneration(sparser)
 
+		case "9":
+			transposed := cfg
+			transposed.Key = adjacentKey(cfg.Key)
+			if lastRun.Seed != "" {
+				if seedPtr, ok := seedPtrFromString(lastRun.Seed); ok {
+					transposed.Seed = seedPtr
+				}
+			}
+			if transposed.Progression != "" {
+				transposed.Progression = transposeProgressionCLI(transposed.Progression, cfg.Key, transposed.Key)
+			}
+			fmt.Printf("\n  %s-> Same seed in %s%s\n\n", ansiGreen, transposed.Key, ansiReset)
+			runGeneration(transposed)
+			cfg = transposed
+
+		case "b", "bass", "bassline":
+			runSinglePartAction(cfg, "bassline")
+
+		case "a", "arp", "arpeggio":
+			runSinglePartAction(cfg, "arpeggio")
+
+		case "m", "melody":
+			runSinglePartAction(cfg, "melody")
+
+		case "l", "lock":
+			if lastRun.ProgCLI == "" {
+				fmt.Printf("  %s-> No prior progression available to lock%s\n", ansiRed, ansiReset)
+				continue
+			}
+			cfg.Progression = lastRun.ProgCLI
+			fmt.Printf("\n  %s-> Progression locked: %s%s\n\n", ansiGreen, cfg.Progression, ansiReset)
+
 		case "q", "quit", "exit":
 			fmt.Printf("\n  %sSession closed.%s\n\n", ansiDim, ansiReset)
 			return false
 
 		default:
-			fmt.Printf("  %s-> Enter 1–8 or q%s\n", ansiRed, ansiReset)
+			fmt.Printf("  %s-> Enter 1-9, b, a, m, l, or q%s\n", ansiRed, ansiReset)
 		}
 	}
 }
@@ -413,7 +458,7 @@ func runGeneration(cfg cliConfig) {
 
 	// Generate multiple variations if requested
 	for varNum := 1; varNum <= cfg.Variations; varNum++ {
-		if cfg.Variations > 1 {
+		if cfg.Variations > 1 && !cfg.JSONOutput {
 			fmt.Printf("\n  %s═══ Variation %d/%d ═══%s\n\n", ansiCyan+ansiBold, varNum, cfg.Variations, ansiReset)
 		}
 
@@ -427,7 +472,11 @@ func runGeneration(cfg cliConfig) {
 		seedStr := fmt.Sprintf("%d", actualSeed)
 
 		if err := runSingleGeneration(ctx, cfg, varNum, seedStr); err != nil {
-			fmt.Printf("  %s✗  Variation %d failed: %v%s\n\n", ansiRed+ansiBold, varNum, err, ansiReset)
+			if cfg.JSONOutput {
+				fmt.Fprintf(os.Stderr, "variation %d failed: %v\n", varNum, err)
+			} else {
+				fmt.Printf("  %s✗  Variation %d failed: %v%s\n\n", ansiRed+ansiBold, varNum, err, ansiReset)
+			}
 		}
 	}
 }
@@ -493,16 +542,19 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 		OfflineStyle:     cfg.OfflineStyle,
 	}
 
-	fmt.Printf("  %sRendering MIDI tracks...%s\n\n", ansiCyan+ansiBold, ansiReset)
-	if cfg.Drums {
-		fmt.Printf("  %s♩  Bassline%s   — root motion & low-end chord anchors\n", ansiDim, ansiReset)
-		fmt.Printf("  %s♩  Arpeggio%s   — chord-tone texture & rhythmic groove\n", ansiDim, ansiReset)
-		fmt.Printf("  %s♩  Melody%s     — phrase arc, motif evolution & fills\n", ansiDim, ansiReset)
-		fmt.Printf("  %s♩  Drums%s      — kick, clap, hi-hat pattern (CH10)\n\n", ansiDim, ansiReset)
-	} else {
-		fmt.Printf("  %s♩  Bassline%s   — root motion & low-end chord anchors\n", ansiDim, ansiReset)
-		fmt.Printf("  %s♩  Arpeggio%s   — chord-tone texture & rhythmic groove\n", ansiDim, ansiReset)
-		fmt.Printf("  %s♩  Melody%s     — phrase arc, motif evolution & fills\n\n", ansiDim, ansiReset)
+	if !cfg.JSONOutput {
+		fmt.Printf("  %sRendering MIDI tracks...%s\n\n", ansiCyan+ansiBold, ansiReset)
+		if cfg.Drums {
+			fmt.Printf("  %s♩  Bassline%s   — root motion & low-end chord anchors\n", ansiDim, ansiReset)
+			fmt.Printf("  %s♩  Arpeggio%s   — chord-tone texture & rhythmic groove\n", ansiDim, ansiReset)
+			fmt.Printf("  %s♩  Melody%s     — phrase arc, motif evolution & fills\n", ansiDim, ansiReset)
+			fmt.Printf("  %s♩  Drums%s      — kick, clap, hi-hat pattern (CH10)\n\n", ansiDim, ansiReset)
+		} else {
+			fmt.Printf("  %s♩  Bassline%s   — root motion & low-end chord anchors\n", ansiDim, ansiReset)
+			fmt.Printf("  %s♩  Arpeggio%s   — chord-tone texture & rhythmic groove\n", ansiDim, ansiReset)
+			fmt.Printf("  %s♩  Melody%s     — phrase arc, motif evolution & fills\n\n", ansiDim, ansiReset)
+		}
+
 	}
 
 	result, err := mg.GenerateWithContext(ctx, musicCtx, cfg.Bars, varNum)
@@ -513,6 +565,10 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 
 	// REFACTOR.md point 19: Dry-run mode — don't write files, print summary
 	if cfg.DryRun {
+		if cfg.JSONOutput {
+			printGenerationJSON(cfg, seedStr, progressionToCLIString(prog), nil, true, "")
+			return nil
+		}
 		fmt.Println(sepLine)
 		fmt.Println()
 		fmt.Printf("  %s✓  DRY RUN — Pipeline executed successfully%s\n\n", ansiYellow+ansiBold, ansiReset)
@@ -556,6 +612,13 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 		outputFiles = result.Files
 	}
 
+	if cfg.JSONOutput {
+		printGenerationJSON(cfg, seedStr, progressionToCLIString(prog), outputFiles, false, "")
+		lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key, Files: outputFiles}
+		slog.Info("session complete", "files", len(outputFiles), "seed", seedStr, "bars", cfg.Bars)
+		return nil
+	}
+
 	// Print results with absolute paths so users can find files easily
 	fmt.Println(sepLine)
 	fmt.Println()
@@ -581,7 +644,7 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 	fmt.Printf("  %sReproduce:%s  %s%s%s\n", ansiBold, ansiReset, ansiCyan, reproduceCmd(cfg, seedStr), ansiReset)
 	fmt.Printf("  %s           Run this command again to recreate these exact patterns.%s\n\n", ansiDim, ansiReset)
 
-	lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key}
+	lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key, Files: outputFiles}
 	slog.Info("session complete", "files", len(outputFiles), "seed", seedStr, "bars", cfg.Bars)
 	return nil
 }

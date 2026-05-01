@@ -52,6 +52,11 @@ No identical 4-step rhythmic phrase (same active/inactive pattern) repeated more
 - Use `ghost: true` for subtle off-beat passing notes
 - Choose style_profile from: "bass_progressive", "bass_driving", "bass_sub"
 
+**Evolution constraints (CRITICAL — wrong values cause rejection):**
+- `action` must be exactly one of: `introduce` | `build` | `peak` | `release` | `octave_up` | `octave_down` | `density_up` | `density_down` | `add_chord_note` | `strip_to_root` | `ornament`
+- `intensity` must be a float 0.0–1.0 (e.g. 0.3, not 3 or 30)
+- Typical 4-phase arc: `introduce`(0.3) → `build`(0.6) → `peak`(0.9) → `release`(0.5)
+
 **JSON schema required fields:**
 - spec_version: "1.0"
 - pattern_type: "bassline"
@@ -59,7 +64,7 @@ No identical 4-step rhythmic phrase (same active/inactive pattern) repeated more
 - theory: {key, mode, scale, octave_range: [1, 3]}
 - style_profile: one of "bass_progressive" | "bass_driving" | "bass_sub"
 - motif: {length: 16, steps: [{active, note?, accent?, slide?, ghost?, legato?}]}
-- evolution: [{from_bar, to_bar, action, intensity}] — 4 phases matching the arc above
+- evolution: [{from_bar, to_bar, action, intensity}] — 4 phases, bars 1-4, 5-8, 9-12, 13-16
 - automation: {filter_sweep: {style: "subtle"|"medium"|"dramatic"}}
 - variation_seed: "{{SEED}}"
 

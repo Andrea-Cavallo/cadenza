@@ -88,6 +88,7 @@ func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProg
 	stepErrs, activeCount := validateMotif(spec, constraints)
 	errs = append(errs, stepErrs...)
 	errs = append(errs, validateDensity(activeCount, constraints, spec.PatternType)...)
+	errs = append(errs, validateAntiLoop(spec)...)
 	errs = append(errs, validateEvolution(spec.Evolution)...)
 	errs = append(errs, v.validateOptionalChordCoherence(spec, prog)...)
 
@@ -170,6 +171,14 @@ func validateDensity(activeCount int, constraints patternConstraints, patternTyp
 	default:
 		return nil
 	}
+}
+
+func validateAntiLoop(spec *PatternSpec) []string {
+	repeated := repeatedPhraseCount(spec.Motif.Steps)
+	if repeated == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("anti-loop failed: a 4-step phrase repeats more than twice without rhythmic, pitch, or articulation variation (%d excess repeat(s))", repeated)}
 }
 
 func validateEvolution(evolutions []EvolutionStep) []string {

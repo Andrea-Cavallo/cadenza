@@ -19,16 +19,20 @@ Offline mode (`--no-llm`) generates hypnotic, varied patterns algorithmically.
 User (BPM + Key)
   → KeyParser
   → Step 0: Chord Progression (4 chords, shared)
-  → Step 1: 3x parallel generators (bass, arp, melody) — all receive same chord progression
-  → Validator (scale + range + density + chord coherence)
+  → Step 1a: MusicalPlan (style card + tension curve + motif intent)
+  → Step 1: 3x parallel generators (bass, arp, melody) — all receive same chord progression + plan
+  → Critic + one targeted revision round when musical scoring is weak
+  → Validator (scale + range + density + chord coherence + soft musical scoring)
   → StyleProfile → Renderer
   → 3 MIDI Type-0 files
 ```
 
 - **Step 0 (Chord Progression)** owns: harmonic contract — 4 chords, one per 4 bars
-- **LLM** owns: motif creativity, note choice, evolution arc (within chord constraints)
+- **MusicalPlan** owns: producer intent — style card, tension curve, motif concept, density target, and section intent
+- **LLM** owns: motif creativity, note choice, evolution arc (within chord and plan constraints)
+- **Critic** owns: soft quality judgment — repetition, motif clarity, chord-tone strength, contour, density, tension arc, track separation; at most one targeted revision
 - **Renderer** owns: timing offsets, velocity grids, gate lengths, CC automation, portamento
-- **Validator** enforces: note range, scale membership, density, chord coherence, BPM bounds
+- **Validator** enforces: note range, scale membership, density, chord coherence, BPM bounds; it also reports soft musical scores
 - **Offline mode** owns: seed-based algorithmic pattern generation (no API calls)
 
 ## Implementation Order
@@ -40,6 +44,7 @@ P0-binary
   → P0-0c (modal support)
   → P0-0d (LLM prompt quality)
   → P0-0e (offline hypnotic patterns)
+  → P0-0f (LLM planner + critic quality)
     → P1 (README + demo — only after music sounds good)
       → P2-Phase1
       → P2-Phase2
@@ -56,11 +61,11 @@ P0-binary
 |------|---------|
 | `cmd/cadenza/` | CLI entry point, interactive mode |
 | `internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
-| `internal/schema/` | PatternSpec types + musical validator (with chord coherence check) |
+| `internal/schema/` | PatternSpec types + musical validator (with chord coherence check and soft musical scoring) |
 | `internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
 | `internal/renderer/` | MIDI rendering: velocity, timing, gate, sweep, evolution, portamento |
 | `internal/renderer/styleprofile/` | Deterministic style profiles with DynamicCurve (crescendo/arch) |
-| `internal/generator/` | Chord progression gen + single/multi-pattern generation + offline templates + LLM cache integration |
+| `internal/generator/` | Chord progression gen + MusicalPlan/style cards + single/multi-pattern generation + offline templates + LLM cache integration |
 | `internal/midi/` | MIDI Type-0 file writer with priority-based event ordering |
 | `internal/cache/` | SHA256-keyed disk cache (30-day TTL) |
 | `prompts/` | LLM prompt templates (bassline, arpeggio, melody) |
@@ -110,7 +115,9 @@ These are **invariants** the renderer enforces regardless of LLM output:
 - **System prompt:** Persistent rules and constraints sent via `System` field; user message contains only the specific generation task
 - **Retry:** max 3 attempts; classifies errors as structural (JSON parse) vs musical (validation); different correction prompts for each
 - **Temperature:** 0.3 for consistency
-- **Cache:** SHA256(provider+type+key+mode+seed), 30-day TTL on disk — skip API call if cached
+- **MusicalPlan:** generated before PatternSpec prompts; injects style card, tension curve, motif concept, section intent, and revision priorities
+- **Critic/revision:** one critic pass may request one targeted revision; never loop endlessly
+- **Cache:** SHA256(provider+type+key+mode+seed+prompt hash+planner version+style-card version+style-card name+critic version+revision policy), 30-day TTL on disk — skip API call if cached
 - **Graceful fallback:** if LLM fails after 3 retries, falls back to offline template (never fails completely)
 - **Chord coherence:** validator checks that each 4-step section contains at least one chord tone
 

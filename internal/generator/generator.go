@@ -13,6 +13,7 @@ import (
 
 	"github.com/Andrea-Cavallo/cadenza/internal/cache"
 	"github.com/Andrea-Cavallo/cadenza/internal/llm"
+	embeddedprompts "github.com/Andrea-Cavallo/cadenza/internal/prompts"
 	"github.com/Andrea-Cavallo/cadenza/internal/schema"
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
@@ -41,7 +42,6 @@ func NewGenerator(provider llm.Provider, validator *schema.Validator, c *cache.C
 		provider:  provider,
 		validator: validator,
 		cache:     c,
-		promptDir: "prompts",
 	}
 }
 
@@ -55,18 +55,54 @@ Rules:
 - Evolution phases must cover all 16 bars without gaps or overlaps
 - Density must stay within the specified range for the pattern type
 - variation_seed must match the provided seed exactly
-- Return ONLY valid JSON, no markdown, no explanation`
+- Return ONLY valid JSON, no markdown, no explanation
+
+CRITICAL — evolution field constraints (violations cause rejection):
+- "action" must be exactly one of these strings (no other values accepted):
+    introduce | build | peak | release | octave_up | octave_down |
+    density_up | density_down | add_chord_note | strip_to_root | ornament
+- "intensity" must be a decimal float in [0.0, 1.0] — e.g. 0.3 or 0.8. Never an integer like 3 or 10.
+- A typical 4-phase evolution: introduce(0.3) → build(0.6) → peak(0.9) → release(0.5)`
+
+func (g *SingleGenerator) readPrompt(patternType string) ([]byte, error) {
+	if g.promptDir != "" {
+		path := filepath.Join(g.promptDir, patternType+"_v1.md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read prompt %q: %w", path, err)
+		}
+		return data, nil
+	}
+	data, err := embeddedprompts.FS.ReadFile(patternType + "_v1.md")
+	if err != nil {
+		return nil, fmt.Errorf("read prompt %q: %w", patternType+"_v1.md", err)
+	}
+	return data, nil
+}
 
 func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, patternType string) (*schema.PatternSpec, error) {
-	promptPath := filepath.Join(g.promptDir, patternType+"_v1.md")
-	promptTemplate, err := os.ReadFile(promptPath)
+	promptTemplate, err := g.readPrompt(patternType)
 	if err != nil {
-		return nil, fmt.Errorf("read prompt %q: %w", promptPath, err)
+		return nil, err
 	}
+
+	plan := g.loadOrBuildMusicalPlan(musicCtx, patternType)
 
 	// REFACTOR.md point 6: Include prompt template hash in cache key for invalidation on prompt changes
 	promptHash := hashContent(promptTemplate)
-	cacheKeys := []string{g.provider.Name(), patternType, musicCtx.Key.Root, musicCtx.Key.Mode, musicCtx.VariationSeed, promptHash}
+	cacheKeys := []string{
+		g.provider.Name(),
+		patternType,
+		musicCtx.Key.Root,
+		musicCtx.Key.Mode,
+		musicCtx.VariationSeed,
+		promptHash,
+		plannerVersion,
+		styleCardVersion,
+		plan.StyleCard.Name,
+		criticVersion,
+		revisionPolicyVersion,
+	}
 
 	if g.cache != nil {
 		if cached, ok := g.cache.Get(cacheKeys...); ok {
@@ -94,7 +130,19 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 	prompt = strings.ReplaceAll(prompt, "{{BPM}}", fmt.Sprintf("%.0f", musicCtx.BPM))
 	prompt = strings.ReplaceAll(prompt, "{{SEED}}", musicCtx.VariationSeed)
 	prompt = strings.ReplaceAll(prompt, "{{CHORD_PROGRESSION}}", chordStr)
+	prompt = strings.ReplaceAll(prompt, "{{MUSICAL_PLAN}}", plan.PromptText())
 	prompt = strings.ReplaceAll(prompt, "{{SCHEMA}}", schemaExample)
+	if !strings.Contains(string(promptTemplate), "{{MUSICAL_PLAN}}") {
+		prompt += "\n\n**Musical plan:**\n" + plan.PromptText()
+	}
+
+	slog.Info("musical plan",
+		"type", patternType,
+		"seed", musicCtx.VariationSeed,
+		"style_card", plan.StyleCard.Name,
+		"motif", plan.MotifConcept,
+		"tension_curve", plan.TensionCurve,
+	)
 
 	req := llm.GenerateRequest{
 		System:           systemPrompt,
@@ -119,17 +167,58 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 		return nil, err
 	}
 
-	if g.cache != nil {
-		if err := g.cache.Set(rawJSON, cacheKeys...); err != nil {
-			slog.Warn("cache write failed", "error", err)
-		}
-	}
-
 	var spec schema.PatternSpec
 	if err := json.Unmarshal(rawJSON, &spec); err != nil {
 		return nil, fmt.Errorf("final parse: %w", err)
 	}
-	return &spec, nil
+	specPtr, finalJSON := g.critiqueAndMaybeRevise(ctx, req, rawJSON, &spec, musicCtx, plan)
+	score := g.validator.ScoreMusicality(specPtr, musicCtx.ChordProgression)
+	slog.Info("musical score",
+		"type", patternType,
+		"seed", musicCtx.VariationSeed,
+		"repeated_phrases", score.RepeatedPhraseCount,
+		"downbeat_chord_tone_ratio", score.DownbeatChordToneRatio,
+		"pitch_contour_diversity", score.PitchContourDiversity,
+		"velocity_flatness", score.VelocityFlatness,
+		"warnings", score.Warnings,
+	)
+	if g.cache != nil {
+		if err := g.cache.Set(finalJSON, cacheKeys...); err != nil {
+			slog.Warn("cache write failed", "error", err)
+		}
+	}
+	return specPtr, nil
+}
+
+func (g *SingleGenerator) loadOrBuildMusicalPlan(musicCtx MusicContext, patternType string) MusicalPlan {
+	planKeys := []string{
+		"musical-plan",
+		patternType,
+		musicCtx.Key.Root,
+		musicCtx.Key.Mode,
+		musicCtx.VariationSeed,
+		plannerVersion,
+		styleCardVersion,
+		musicCtx.OfflineStyle,
+	}
+	if g.cache != nil {
+		if cached, ok := g.cache.Get(planKeys...); ok {
+			var plan MusicalPlan
+			if err := json.Unmarshal(cached, &plan); err == nil && plan.PatternType != "" {
+				return plan
+			}
+		}
+	}
+
+	plan := BuildMusicalPlan(musicCtx, patternType)
+	if g.cache != nil {
+		if raw, err := json.Marshal(plan); err == nil {
+			if err := g.cache.Set(raw, planKeys...); err != nil {
+				slog.Warn("plan cache write failed", "error", err)
+			}
+		}
+	}
+	return plan
 }
 
 func exampleSpecJSON(patternType string) string {

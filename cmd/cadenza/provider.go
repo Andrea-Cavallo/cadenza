@@ -6,6 +6,7 @@ import (
 
 	"github.com/Andrea-Cavallo/cadenza/internal/config"
 	"github.com/Andrea-Cavallo/cadenza/internal/llm"
+	"github.com/Andrea-Cavallo/cadenza/internal/models"
 )
 
 func buildProvider(noLLM bool, providerName, model, ollamaURL string) (llm.Provider, error) {
@@ -30,17 +31,14 @@ func buildProvider(noLLM bool, providerName, model, ollamaURL string) (llm.Provi
 	}
 }
 
+// resolveDefaultModel returns the default model for a provider from the catalog,
+// falling back to the app config value for claude (which may be set by the user).
 func resolveDefaultModel(provider string, appCfg *config.AppConfig) string {
-	switch provider {
-	case "claude":
-		return appCfg.LLM.Model
-	case "ollama":
-		return "qwen2.5:7b"
-	case "openai":
-		return "gpt-4o"
-	case "gemini":
-		return "gemini-2.0-flash-exp"
-	default:
+	if provider == "claude" && appCfg.LLM.Model != "" {
 		return appCfg.LLM.Model
 	}
+	if def := models.DefaultModel(provider); def != "" {
+		return def
+	}
+	return appCfg.LLM.Model
 }

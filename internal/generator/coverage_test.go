@@ -12,6 +12,9 @@ import (
 
 	"github.com/Andrea-Cavallo/cadenza/internal/cache"
 	"github.com/Andrea-Cavallo/cadenza/internal/llm"
+	midipkg "github.com/Andrea-Cavallo/cadenza/internal/midi"
+	"github.com/Andrea-Cavallo/cadenza/internal/renderer"
+	"github.com/Andrea-Cavallo/cadenza/internal/renderer/styleprofile"
 	"github.com/Andrea-Cavallo/cadenza/internal/schema"
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
@@ -148,6 +151,30 @@ func TestMultiGenerator_AdditionalBranches(t *testing.T) {
 	}
 }
 
+func TestMultiGenerator_LLMFailureFallsBackOffline(t *testing.T) {
+	ctx := MusicContext{
+		BPM:              122,
+		Key:              theory.Key{Root: "A", Mode: "minor", Scale: "minor_natural"},
+		ChordProgression: theory.SelectProgression("A", "minor_natural", "fallback-seed"),
+		VariationSeed:    "fallback-seed",
+		Groove:           "straight",
+		Bars:             16,
+	}
+	v := schema.NewValidator()
+	reg := styleprofile.NewRegistry()
+	rend := renderer.New()
+	w := midipkg.NewWriter(122)
+	mg := NewMultiGenerator(&llm.MockProvider{Err: errors.New("llm unavailable")}, v, reg, rend, w, t.TempDir())
+
+	spec, err := mg.generatePattern(context.Background(), ctx, "melody")
+	if err != nil {
+		t.Fatalf("expected offline fallback after LLM failure, got %v", err)
+	}
+	if spec.PatternType != "melody" || spec.VariationSeed != ctx.VariationSeed {
+		t.Fatalf("unexpected fallback spec %+v", spec)
+	}
+}
+
 func TestOfflineProfileHelpers_Branches(t *testing.T) {
 	minorKey := theory.Key{Root: "A", Mode: "minor", Scale: "minor_natural"}
 	majorKey := theory.Key{Root: "C", Mode: "major", Scale: "major"}
@@ -200,6 +227,8 @@ func TestSingleGenerator_GenerateBranches(t *testing.T) {
 	testSingleGeneratorMissingPrompt(t, ctx)
 	testSingleGeneratorCacheHit(t, ctx)
 	testSingleGeneratorInvalidCacheFallback(t, ctx)
+	testSingleGeneratorInjectsMusicalPlan(t, ctx)
+	testSingleGeneratorCriticRevision(t, ctx)
 }
 
 func TestOfflineHelpers_AdditionalBranches(t *testing.T) {
@@ -214,6 +243,53 @@ func TestOfflineHelpers_AdditionalBranches(t *testing.T) {
 	assertOfflineChordHelpers(t, minorKey)
 	assertOfflineProfileSelection(t, minorKey, majorKey, hash)
 	assertOfflineSequenceBuilders(t, minorKey, hash)
+}
+
+func TestBuildMusicalPlan_StyleCardsAndPromptText(t *testing.T) {
+	ctx := MusicContext{
+		BPM:              130,
+		Key:              theory.Key{Root: "D", Mode: "dorian", Scale: "dorian"},
+		ChordProgression: theory.SelectProgression("D", "dorian", "plan-seed"),
+		VariationSeed:    "plan-seed",
+		OfflineStyle:     "driving",
+	}
+	plan := BuildMusicalPlan(ctx, "arpeggio")
+	if plan.StyleCard.Name != "warehouse-driving" {
+		t.Fatalf("expected driving style card, got %q", plan.StyleCard.Name)
+	}
+	text := plan.PromptText()
+	for _, want := range []string{"Style card:", "Section intentions:", "Revision priorities", "arpeggio direction"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected plan text to contain %q, got %q", want, text)
+		}
+	}
+
+	ctx.OfflineStyle = ""
+	ctx.BPM = 122
+	plan = BuildMusicalPlan(ctx, "melody")
+	if plan.StyleCard.Name != "afterlife-dark" {
+		t.Fatalf("expected Dorian to map to afterlife-dark, got %q", plan.StyleCard.Name)
+	}
+	if !strings.Contains(plan.MotifConcept, "tension") {
+		t.Fatalf("expected melody motif concept to mention tension, got %q", plan.MotifConcept)
+	}
+}
+
+func TestGoldenPromptContracts(t *testing.T) {
+	for _, promptName := range []string{"bassline_v1.md", "arpeggio_v1.md", "melody_v1.md"} {
+		t.Run(promptName, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("..", "..", "prompts", promptName))
+			if err != nil {
+				t.Fatalf("read prompt: %v", err)
+			}
+			prompt := string(raw)
+			for _, want := range []string{"{{MUSICAL_PLAN}}", "{{MODE_CHARACTER}}", "{{CHORD_PROGRESSION}}", "Return ONLY valid JSON"} {
+				if !strings.Contains(prompt, want) {
+					t.Fatalf("prompt %s missing contract marker %q", promptName, want)
+				}
+			}
+		})
+	}
 }
 
 func TestDrumHelpers_DirectBranches(t *testing.T) {
@@ -234,7 +310,7 @@ func TestDrumHelpers_DirectBranches(t *testing.T) {
 	}
 }
 
-const generatorPromptTemplate = "{{KEY}} {{MODE}} {{SCALE}} {{BPM}} {{SEED}} {{CHORD_PROGRESSION}} {{SCHEMA}}"
+const generatorPromptTemplate = "{{KEY}} {{MODE}} {{SCALE}} {{BPM}} {{SEED}} {{CHORD_PROGRESSION}} {{MUSICAL_PLAN}} {{SCHEMA}}"
 
 func testSingleGeneratorMissingPrompt(t *testing.T, ctx MusicContext) {
 	t.Helper()
@@ -314,7 +390,134 @@ func writeGeneratorPrompt(t *testing.T, promptDir, prompt string) {
 }
 
 func generatorCacheKeys(g *SingleGenerator, ctx MusicContext, prompt string) []string {
-	return []string{g.provider.Name(), "bassline", ctx.Key.Root, ctx.Key.Mode, ctx.VariationSeed, hashContent([]byte(prompt))}
+	plan := BuildMusicalPlan(ctx, "bassline")
+	return []string{
+		g.provider.Name(),
+		"bassline",
+		ctx.Key.Root,
+		ctx.Key.Mode,
+		ctx.VariationSeed,
+		hashContent([]byte(prompt)),
+		plannerVersion,
+		styleCardVersion,
+		plan.StyleCard.Name,
+		criticVersion,
+		revisionPolicyVersion,
+	}
+}
+
+func testSingleGeneratorInjectsMusicalPlan(t *testing.T, ctx MusicContext) {
+	t.Helper()
+	t.Run("injects musical plan into prompt", func(t *testing.T) {
+		tmp := t.TempDir()
+		validSpec := offlineTemplate("bassline", ctx)
+		raw, err := json.Marshal(validSpec)
+		if err != nil {
+			t.Fatalf("marshal spec: %v", err)
+		}
+		provider := &recordingProvider{response: raw}
+		g := NewGenerator(provider, schema.NewValidator(), nil)
+		g.promptDir = filepath.Join(tmp, "prompts")
+		writeGeneratorPrompt(t, g.promptDir, generatorPromptTemplate)
+
+		if _, err := g.Generate(context.Background(), ctx, "bassline"); err != nil {
+			t.Fatalf("unexpected generate error: %v", err)
+		}
+		prompt := provider.lastRequest.Messages[0].Content
+		for _, want := range []string{"Style card:", "Motif concept:", "Revision priorities", "prydz-progressive"} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("expected prompt to contain %q, got %q", want, prompt)
+			}
+		}
+	})
+}
+
+type recordingProvider struct {
+	response    []byte
+	lastRequest llm.GenerateRequest
+}
+
+func (p *recordingProvider) Name() string {
+	return "recording"
+}
+
+func (p *recordingProvider) Generate(_ context.Context, req llm.GenerateRequest) (llm.GenerateResponse, error) {
+	p.lastRequest = req
+	return llm.GenerateResponse{RawJSON: p.response, Provider: p.Name()}, nil
+}
+
+func testSingleGeneratorCriticRevision(t *testing.T, ctx MusicContext) {
+	t.Helper()
+	t.Run("critic applies one targeted revision", func(t *testing.T) {
+		tmp := t.TempDir()
+		initial := offlineTemplate("bassline", ctx)
+		revised := offlineTemplate("bassline", ctx)
+		revised.Meta.Description = "revised by critic"
+
+		initialRaw, err := json.Marshal(initial)
+		if err != nil {
+			t.Fatalf("marshal initial: %v", err)
+		}
+		revisedRaw, err := json.Marshal(revised)
+		if err != nil {
+			t.Fatalf("marshal revised: %v", err)
+		}
+		criticRaw := []byte(mustJSON(CriticReport{
+			PatternType:             "bassline",
+			NeedsRevision:           true,
+			RepetitionScore:         0.4,
+			MotifClarityScore:       0.8,
+			ChordToneStrengthScore:  0.9,
+			ContourScore:            0.7,
+			DensityScore:            0.8,
+			TensionArcScore:         0.5,
+			TrackSeparationScore:    0.9,
+			Problems:                []string{"section tension arc does not clearly build and resolve"},
+			RevisionInstructions:    []string{"make bars 9-12 the tension point"},
+			KeepElements:            []string{"keep downbeat chord tones"},
+			RevisionPromptVersion:   revisionPolicyVersion,
+			OneRevisionRoundApplied: false,
+		}))
+
+		provider := &sequenceProvider{responses: [][]byte{initialRaw, criticRaw, revisedRaw}}
+		g := NewGenerator(provider, schema.NewValidator(), nil)
+		g.promptDir = filepath.Join(tmp, "prompts")
+		writeGeneratorPrompt(t, g.promptDir, generatorPromptTemplate)
+
+		spec, err := g.Generate(context.Background(), ctx, "bassline")
+		if err != nil {
+			t.Fatalf("unexpected generate error: %v", err)
+		}
+		if spec.Meta.Description != "revised by critic" {
+			t.Fatalf("expected revised spec, got description %q", spec.Meta.Description)
+		}
+		if provider.calls != 3 {
+			t.Fatalf("expected initial + critic + one revision call, got %d", provider.calls)
+		}
+		if !strings.Contains(provider.requests[2].Messages[len(provider.requests[2].Messages)-1].Content, "Revise the previous PatternSpec once") {
+			t.Fatalf("expected targeted revision prompt, got %#v", provider.requests[2].Messages)
+		}
+	})
+}
+
+type sequenceProvider struct {
+	responses [][]byte
+	requests  []llm.GenerateRequest
+	calls     int
+}
+
+func (p *sequenceProvider) Name() string {
+	return "sequence"
+}
+
+func (p *sequenceProvider) Generate(_ context.Context, req llm.GenerateRequest) (llm.GenerateResponse, error) {
+	p.requests = append(p.requests, req)
+	idx := p.calls
+	p.calls++
+	if idx >= len(p.responses) {
+		idx = len(p.responses) - 1
+	}
+	return llm.GenerateResponse{RawJSON: p.responses[idx], Provider: p.Name()}, nil
 }
 
 func assertOfflineStringHelpers(t *testing.T, minorKey theory.Key) {
