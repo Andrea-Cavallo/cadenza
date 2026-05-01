@@ -63,7 +63,7 @@ func (w *Writer) WriteFile(path string, events []MIDIEvent) error {
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := f.Write(header); err != nil {
 		return fmt.Errorf("write header: %w", err)

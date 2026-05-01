@@ -162,7 +162,7 @@ func (p *GeminiProvider) Generate(ctx context.Context, req GenerateRequest) (Gen
 	if err != nil {
 		return GenerateResponse{}, fmt.Errorf("http request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {

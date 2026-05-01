@@ -32,7 +32,7 @@ type Catalog struct {
 
 var global *Catalog
 
-// Load initialises the global catalog. Call once at startup.
+// Load initializes the global catalog. Call once at startup.
 // It checks (in order): localPath arg → ~/.cadenza/models.yaml → ./models.yaml → embedded default.
 func Load(localPath string) {
 	candidates := []string{localPath}

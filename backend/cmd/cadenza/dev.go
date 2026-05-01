@@ -21,7 +21,7 @@ import (
 // generating, validating, and rendering patterns.
 // REFACTOR.md point 20
 func runDevMode() {
-	fmt.Printf("\n  %sâ•â•â• DEV MODE â•â•â•%s\n\n", ansiMagenta+ansiBold, ansiReset)
+	fmt.Printf("\n  %s=== DEV MODE ===%s\n\n", ansiMagenta+ansiBold, ansiReset)
 	fmt.Printf("  %sInteractive REPL for development and debugging%s\n", ansiDim, ansiReset)
 	fmt.Printf("  %sType 'help' for available commands%s\n\n", ansiDim, ansiReset)
 
@@ -55,7 +55,7 @@ func runDevMode() {
 			printDevHelp()
 
 		case "exit", "quit", "q":
-			fmt.Printf("\n  %sâœ•  Dev mode exited.%s\n\n", ansiDim, ansiReset)
+			fmt.Printf("\n  %sX  Dev mode exited.%s\n\n", ansiDim, ansiReset)
 			return
 
 		case "generate", "gen":

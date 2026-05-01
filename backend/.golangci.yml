@@ -1,6 +1,7 @@
+version: "2"
+
 run:
   timeout: 3m
-  go: "1.25.9"
 
 linters:
   enable:
@@ -9,20 +10,21 @@ linters:
     - staticcheck
     - unused
     - ineffassign
-    - gosimple
     - gocritic
     - misspell
+  settings:
+    gocritic:
+      enabled-checks:
+        - dupImport
+        - nestingReduce
+        - unnamedResult
+    misspell:
+      locale: US
+
+formatters:
+  enable:
     - gofmt
     - goimports
-
-linters-settings:
-  gocritic:
-    enabled-checks:
-      - dupImport
-      - nestingReduce
-      - unnamedResult
-  misspell:
-    locale: US
 
 issues:
   exclude-dirs:

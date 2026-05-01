@@ -29,14 +29,14 @@ func parseConfigInitArgs(args []string) (handled bool, force bool, err error) {
 		return false, false, nil
 	}
 	if args[1] != "init" {
-		return true, false, fmt.Errorf("Usage: cadenza config init [--force]")
+		return true, false, fmt.Errorf("usage: cadenza config init [--force]")
 	}
 	for _, arg := range args[2:] {
 		if arg == "--force" {
 			force = true
 			continue
 		}
-		return true, false, fmt.Errorf("Unknown config init option %q", arg)
+		return true, false, fmt.Errorf("unknown config init option %q", arg)
 	}
 	return true, force, nil
 }

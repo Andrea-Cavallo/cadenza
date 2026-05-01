@@ -459,21 +459,19 @@ func selectModel(provider string) string {
 	}
 	fmt.Printf("\n  %s(press Enter for default: %s)%s\n\n", ansiDim, models.DefaultModel(provider), ansiReset)
 
-	for {
-		raw := ask("Model")
-		if raw == "" {
-			return models.DefaultModel(provider)
-		}
-		idx := 0
-		if _, err := fmt.Sscanf(raw, "%d", &idx); err == nil && idx >= 1 && idx <= len(list) {
-			chosen := list[idx-1].ID
-			fmt.Printf("\n  %s-> %s%s\n\n", ansiGreen, chosen, ansiReset)
-			return chosen
-		}
-		// Accept any non-empty string as a custom model ID (not limited to catalog)
-		fmt.Printf("\n  %s-> %s%s\n\n", ansiGreen, raw, ansiReset)
-		return raw
+	raw := ask("Model")
+	if raw == "" {
+		return models.DefaultModel(provider)
 	}
+	idx := 0
+	if _, err := fmt.Sscanf(raw, "%d", &idx); err == nil && idx >= 1 && idx <= len(list) {
+		chosen := list[idx-1].ID
+		fmt.Printf("\n  %s-> %s%s\n\n", ansiGreen, chosen, ansiReset)
+		return chosen
+	}
+	// Accept any non-empty string as a custom model ID (not limited to catalog)
+	fmt.Printf("\n  %s-> %s%s\n\n", ansiGreen, raw, ansiReset)
+	return raw
 }
 
 func printProviderAvailability() {

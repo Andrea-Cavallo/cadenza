@@ -67,13 +67,8 @@ func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed, patternTyp
 	resolution := profile.FilterSweep.Resolution
 	jitter := profile.FilterSweep.Jitter
 
-	// REFACTOR.md point 4: Multi-cycle filter sweep (4 bars cycle for dramatic, 16 for others)
+	// Multi-cycle filter sweep: 4-bar cycle for all styles
 	cycleBars := 4
-	if sweepStyle == "dramatic" {
-		cycleBars = 4 // dramatic mode: 2 complete sweeps over 16 bars (up-down-up-peak)
-	} else if sweepStyle == "medium" || sweepStyle == "subtle" {
-		cycleBars = 4 // medium/subtle: 4-bar cycle
-	}
 
 	// REFACTOR.md point 5: Apply pattern-type-specific phase offset
 	phaseOffset := sweepPhaseOffsets[patternType]
@@ -140,7 +135,7 @@ func evolutionIntensityForBar(bar int, evolutions []schema.EvolutionStep) float6
 
 func deterministicJitter(seed string, bar, step, maxJitter int) int {
 	h := fnv.New32a()
-	fmt.Fprintf(h, "%s:%d:%d", seed, bar, step)
+	_, _ = fmt.Fprintf(h, "%s:%d:%d", seed, bar, step)
 	v := int(h.Sum32() % uint32(maxJitter*2+1))
 	return v - maxJitter
 }
