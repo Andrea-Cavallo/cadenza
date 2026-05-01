@@ -1,8 +1,10 @@
 .PHONY: build test lint run clean listening-test test-integration test-coverage \
-       docker docker-run release-snapshot release sonar vuln ci help install-tools
+       docker docker-run release-snapshot release sonar vuln ci help install-tools \
+       desktop desktop-dev
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
+WAILS ?= wails
 
 ## Build
 
@@ -16,6 +18,18 @@ build-all: ## Cross-compile for all platforms
 	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-darwin-arm64 ./cmd/cadenza/
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-windows-amd64.exe ./cmd/cadenza/
 	GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/cadenza-windows-arm64.exe ./cmd/cadenza/
+
+## Desktop (Wails)
+
+desktop: ## Build Wails desktop EXE (Windows amd64)
+	cd cmd/desktop && $(WAILS) build -platform windows/amd64
+
+desktop-dev: ## Start Wails dev mode with HMR frontend
+	cd cmd/desktop && $(WAILS) dev
+
+desktop-manual: ## Manual Wails-style frontend + Go production build
+	cd cmd/desktop/frontend && npm install && npm run build
+	cd cmd/desktop && go build -tags "desktop,production" -ldflags="-w -s -H windowsgui" -o build/bin/cadenza-desktop.exe .
 
 ## Test
 
@@ -67,7 +81,7 @@ ci: build fmt vet lint vuln test-coverage ## Full local CI pipeline: build → f
 	@echo "CI pipeline complete."
 
 install-tools: ## Install development tools (golangci-lint, govulncheck, goimports)
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 
@@ -144,6 +158,9 @@ help:
 	@echo "Build:"
 	@echo "  make build          Build binary (bin/cadenza)"
 	@echo "  make build-all      Cross-compile all platforms"
+	@echo "  make desktop        Build Wails desktop EXE (Windows)"
+	@echo "  make desktop-dev    Start Wails dev mode (HMR)"
+	@echo "  make desktop-manual Manual frontend + Go desktop build"
 	@echo "  make docker         Build Docker image"
 	@echo ""
 	@echo "Test & Quality:"

@@ -21,6 +21,13 @@ debug/
 # Cache
 .cache/
 
+# Desktop frontend
+backend/cmd/desktop/frontend/dist/
+backend/cmd/desktop/frontend/node_modules/
+backend/cmd/desktop/frontend/wailsjs/
+backend/cmd/desktop/frontend/package.json.md5
+backend/cmd/desktop/build/bin/
+
 # IDE
 .idea/
 .vscode/

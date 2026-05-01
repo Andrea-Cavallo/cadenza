@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Wails v2 desktop app (`backend/cmd/desktop/`) with a standalone `cadenza-desktop.exe` binding the Go MIDI engine directly to a React frontend, no HTTP layer.
+- `AppService` methods exposed to Wails (`Generate`, `GetProviders`, `GetModels`, `GetConfig`, `OpenOutputFolder`) plus progress events for the desktop generation log.
+- Vite + React + TypeScript desktop frontend ported from the JSX prototype, including presets, piano roll, pipeline view, and local generation console.
+- `make desktop`, `make desktop-dev`, and `make desktop-manual`; the manual target follows Wails' documented npm-build-plus-Go-production-build flow.
+- Desktop output defaults to `~/cadenza-output/`, with a cross-platform Open Folder command.
+- Desktop frontend toolchain uses Vite 8 with a clean `npm audit` result.
+
 ### Fixed
+- `install-tools` now installs golangci-lint v2 and `.golangci.yml` declares Go `1.25.9`, keeping lint aligned with the module toolchain.
 - Prompt files are now embedded into the binary via `//go:embed` (`internal/prompts/`); the app no longer falls back to offline mode when the binary is run from a directory other than the project root.
 - Ollama/small-model validation failures: system prompt, correction examples, and all three prompt templates now explicitly list the valid evolution `action` catalog and enforce `intensity` as a float in `[0.0, 1.0]`, preventing the "unknown action" and "intensity out of range" retry loops.
 - Dynamic model catalog (`internal/models/models.yaml`) embedded in binary; add new models by editing YAML without recompiling. Local override at `~/.cadenza/models.yaml` or `./models.yaml` takes precedence. Interactive CLI now shows a numbered model menu after engine selection. 12 Ollama models pre-configured (Qwen 2.5 7B/14B/32B, Llama 3.x, Mistral, Mixtral, Gemma2, Phi-4, DeepSeek-R1, Qwen Coder).

@@ -60,6 +60,8 @@ P0-binary
 | Path | Purpose |
 |------|---------|
 | `cmd/cadenza/` | CLI entry point, interactive mode |
+| `cmd/desktop/` | Wails desktop app entry point and AppService bindings |
+| `cmd/desktop/frontend/` | Vite + React + TypeScript desktop UI embedded into the Wails binary |
 | `internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
 | `internal/schema/` | PatternSpec types + musical validator (with chord coherence check and soft musical scoring) |
 | `internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
@@ -129,6 +131,12 @@ make build
 
 # Cross-compile all platforms
 make build-all
+
+# Desktop app
+make desktop         # Wails Windows build
+make desktop-dev     # Wails dev mode with HMR
+make desktop-manual  # npm install + npm run build + Go production build
+# If wails is installed outside PATH, pass WAILS=/path/to/wails.
 
 # With Claude
 export ANTHROPIC_API_KEY=sk-...

@@ -35,6 +35,8 @@ User (BPM + Key)
 | `backend/` | All Go source, module root (`go.mod` here) |
 | `backend/cmd/cadenza/` | CLI entry point (dev mode only) |
 | `backend/cmd/api/` | HTTP API server (added in Phase 2) |
+| `backend/cmd/desktop/` | Wails desktop app entrypoint + AppService |
+| `backend/cmd/desktop/frontend/` | Vite + React + TypeScript frontend embedded into the desktop binary |
 | `backend/internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
 | `backend/internal/schema/` | PatternSpec types + musical validator (with chord coherence check) |
 | `backend/internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
@@ -122,6 +124,13 @@ cd backend && go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 
 # API server (Phase 2)
 cd backend && go run ./cmd/api/ --port 8080
+
+# Wails desktop app
+cd backend/cmd/desktop && wails dev
+cd backend && make desktop
+cd backend && make desktop-manual  # npm install + npm run build + Go production build
+# If wails is installed outside PATH:
+cd backend && make desktop WAILS=/path/to/wails
 
 # Docker
 cd backend && make docker && make docker-run

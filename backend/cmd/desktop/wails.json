@@ -1,0 +1,11 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Cadenza",
+  "outputfilename": "cadenza-desktop",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "frontend:dir": "frontend",
+  "version": "2"
+}

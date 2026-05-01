@@ -107,6 +107,7 @@ Offline mode:
 - Offline style sub-modes: `--offline-style hypnotic|driving|minimal|melodic`
 - Energy selector (1–5) in interactive mode
 - Post-run iteration: same harmony, same motifs in a new key, regenerate one part, lock progression, A/B compare, faster/slower/busier/sparser
+- Desktop app: Wails-powered local GUI with direct Go bindings, no REST layer required
 - Script integration: `--json`, `--non-interactive`, and `cadenza config init`
 - Reproduce command printed after every run
 - Deterministic renderer with timing, velocity, gate, sweep, and portamento rules
@@ -122,7 +123,22 @@ To use the project after cloning, you need:
 - Go `1.25`
 - Git
 - Optional: `make`
+- Optional: Wails CLI + Node.js for the desktop app
 - Optional: Ollama for local LLM mode
+
+### Desktop app
+
+The desktop app is a Wails v2 shell around the same Go engine. It runs as a native Windows/macOS/Linux app and calls Go methods directly from the React UI; there is no HTTP service between the GUI and the generator.
+
+```bash
+cd backend
+make desktop-dev      # live desktop dev mode
+make desktop          # Wails Windows build
+make desktop-manual   # npm install + npm run build + Go production build
+```
+
+`make desktop-manual` follows the Wails manual build flow: install frontend dependencies, build the Vite frontend, then compile Go with Wails production tags and Windows GUI ldflags.
+If `wails` is not on your PATH, run `make desktop WAILS=/path/to/wails`.
 - Optional: API keys for Claude, OpenAI, or Gemini
 
 Check your Go version:
