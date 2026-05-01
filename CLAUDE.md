@@ -6,6 +6,8 @@ AI-powered MIDI generator: Go 1.25, LLM-driven, progressive house / melodic tech
 
 Takes **BPM + Key** as input, produces **3 MIDI files** (bassline, arpeggio, melody). A shared chord progression ensures harmonic coherence. The LLM creates musical motifs; the renderer applies professional timing, velocity, and automation deterministically via style profiles. Offline mode (`--no-llm`) generates hypnotic, varied patterns algorithmically.
 
+**Core Focus:** The primary goal is musical quality — generating hypnotic, varied, and musically interesting patterns, especially in offline mode (`--no-llm`). All architectural decisions serve this goal.
+
 **Specs:** `"C:\Users\Andrea\Desktop\midillmnew-master\midillm_go-master\docs\superpowers\specs\2026-04-29-midi-examples-design.md"` is the source of truth for architecture, PatternSpec schema, style profiles, and musical rules.
 
 ## Architecture

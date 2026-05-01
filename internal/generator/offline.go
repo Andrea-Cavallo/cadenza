@@ -3,6 +3,7 @@ package generator
 import (
 	"crypto/sha256"
 	"math"
+	"strings"
 
 	"github.com/Andrea-Cavallo/cadenza/internal/schema"
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
@@ -20,6 +21,13 @@ func offlineTemplate(patternType string, musicCtx MusicContext) *schema.PatternS
 	return nil
 }
 
+const (
+	offlineStyleMelodic  = "melodic"
+	offlineStyleHypnotic = "hypnotic"
+	offlineStyleDriving  = "driving"
+	offlineStyleMinimal  = "minimal"
+)
+
 // OfflineTemplate is the public version of offlineTemplate for use by service layer.
 func OfflineTemplate(patternType string, musicCtx MusicContext) *schema.PatternSpec {
 	return offlineTemplate(patternType, musicCtx)
@@ -31,8 +39,9 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 	seed := ctx.VariationSeed
 	bpm := ctx.BPM
 
-	h := seedHash(seed + "bass")
+	h := seedHash(seed + key.Root + key.Scale + "bass")
 	profileName := chooseBassProfile(key, bpm, h)
+	style := normalizeOfflineStyle(ctx.OfflineStyle)
 
 	steps := make([]schema.StepSpec, 16)
 
@@ -51,10 +60,11 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 			pattern = 7
 		}
 
+		color := bassColorTone(key, chord)
 		switch pattern {
-		case 0: // driving 16ths: root-root-fifth-slide
+		case 0: // driving: root-third-fifth-root (harmonic color via third)
 			steps[base] = schema.StepSpec{Active: true, Note: root + "2", Accent: true}
-			steps[base+1] = schema.StepSpec{Active: true, Note: root + "2"}
+			steps[base+1] = schema.StepSpec{Active: true, Note: color + "2"}
 			steps[base+2] = schema.StepSpec{Active: true, Note: fifth + "2"}
 			steps[base+3] = schema.StepSpec{Active: true, Note: root + "2", Slide: true}
 		case 1: // syncopated: root-rest-fifth-ghost
@@ -76,9 +86,9 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 			steps[base+1] = schema.StepSpec{Active: false}
 			steps[base+2] = schema.StepSpec{Active: true, Note: root + "2", Ghost: true}
 			steps[base+3] = schema.StepSpec{Active: true, Note: fifth + "2", Slide: true}
-		case 4: // rolling triplet feel: root-fifth-root-fifth (tight)
+		case 4: // harmonic walk: root-third-root-fifth (minor 3rd sounds darker)
 			steps[base] = schema.StepSpec{Active: true, Note: root + "2", Accent: true}
-			steps[base+1] = schema.StepSpec{Active: true, Note: fifth + "2"}
+			steps[base+1] = schema.StepSpec{Active: true, Note: color + "2"}
 			steps[base+2] = schema.StepSpec{Active: true, Note: root + "2", Ghost: true}
 			steps[base+3] = schema.StepSpec{Active: true, Note: fifth + "2", Slide: true}
 		case 5: // off-beat pump: rest-root-rest-root
@@ -100,6 +110,16 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 		}
 	}
 
+	applyBassOfflineStyle(style, steps, prog, h)
+	if style != offlineStyleHypnotic && style != offlineStyleMinimal {
+		applyPassingNotes("bassline", steps, prog, key, h)
+	}
+	ensureGateVariation(steps)
+
+	// Enforce minimum density: bassline needs at least 8 active steps.
+	// If the hash selected too many sparse patterns, fill off-beats with ghost notes.
+	ensureBassMinDensity(steps, prog)
+
 	return &schema.PatternSpec{
 		SpecVersion:   "1.0",
 		PatternType:   "bassline",
@@ -113,17 +133,311 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 	}
 }
 
-// approachNote returns a chromatic approach note one semitone below the target.
-func approachNote(root string, _ theory.Key) string {
-	midi, err := theory.NoteToMIDI(root + "3")
-	if err != nil || midi <= 0 {
+// ensureBassMinDensity fills inactive off-beat slots with ghost notes until
+// the minimum density (8 active steps) is reached.
+func ensureBassMinDensity(steps []schema.StepSpec, prog theory.ChordProgression) {
+	const minActive = 8
+	active := 0
+	for _, s := range steps {
+		if s.Active {
+			active++
+		}
+	}
+	if active >= minActive {
+		return
+	}
+	// Fill off-beats (step 2 of each section) with ghost root notes.
+	for i, chord := range prog.Chords {
+		if active >= minActive {
+			break
+		}
+		pos := i*4 + 2 // "+2" is the off-beat within the section
+		if !steps[pos].Active {
+			steps[pos] = schema.StepSpec{Active: true, Note: chord.Root + "2", Ghost: true}
+			active++
+		}
+	}
+	// If still short, fill remaining off-beats (step 1 of each section).
+	for i, chord := range prog.Chords {
+		if active >= minActive {
+			break
+		}
+		pos := i*4 + 1
+		if !steps[pos].Active {
+			steps[pos] = schema.StepSpec{Active: true, Note: chord.Root + "2", Ghost: true}
+			active++
+		}
+	}
+}
+
+// approachNote returns the diatonic scale degree immediately below the chord root.
+// Using a chromatic (out-of-scale) semitone violates the validator invariant
+// "notes must be in the declared scale", so we stay diatonic.
+func approachNote(root string, key theory.Key) string {
+	scaleNotes, err := theory.ScaleNotes(key.Root, key.Scale)
+	if err != nil || len(scaleNotes) == 0 {
 		return root
 	}
-	note := theory.MIDIToNote(midi - 1)
-	if len(note) > 0 && note[len(note)-1] >= '0' && note[len(note)-1] <= '9' {
-		note = note[:len(note)-1]
+	for i, note := range scaleNotes {
+		if note == root {
+			if i == 0 {
+				return scaleNotes[len(scaleNotes)-1] // wrap to 7th below
+			}
+			return scaleNotes[i-1]
+		}
 	}
-	return note
+	return root
+}
+
+func normalizeOfflineStyle(style string) string {
+	switch strings.ToLower(strings.TrimSpace(style)) {
+	case offlineStyleHypnotic:
+		return offlineStyleHypnotic
+	case offlineStyleDriving:
+		return offlineStyleDriving
+	case offlineStyleMinimal:
+		return offlineStyleMinimal
+	default:
+		return offlineStyleMelodic
+	}
+}
+
+func applyBassOfflineStyle(style string, steps []schema.StepSpec, prog theory.ChordProgression, h []byte) {
+	switch style {
+	case offlineStyleHypnotic:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			root := chord.Root + "2"
+			steps[base] = schema.StepSpec{Active: true, Note: root, Accent: true, Legato: true}
+			steps[base+2] = schema.StepSpec{Active: true, Note: root, Ghost: true, Legato: true}
+		}
+	case offlineStyleDriving:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			third := chordThird(chord) + "2"
+			fifth := chordFifth(chord) + "2"
+			steps[base] = schema.StepSpec{Active: true, Note: chord.Root + "2", Accent: true, Staccato: h[base%len(h)]%2 == 0}
+			if i == len(prog.Chords)-1 {
+				continue
+			}
+			steps[base+1] = schema.StepSpec{Active: true, Note: third, Staccato: true}
+			steps[base+2] = schema.StepSpec{Active: true, Note: fifth, Ghost: i%2 == 1}
+			steps[base+3] = schema.StepSpec{Active: true, Note: chord.Root + "2", Slide: h[(base+3)%len(h)]%3 == 0}
+		}
+	case offlineStyleMinimal:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			steps[base+1] = schema.StepSpec{Active: true, Note: chord.Root + "2", Accent: i == 0, Staccato: true}
+			steps[base+3] = schema.StepSpec{Active: true, Note: chordFifth(chord) + "2", Ghost: true, Staccato: true}
+		}
+	default:
+		mixGateArticulation(steps, h)
+	}
+}
+
+func applyArpOfflineStyle(style string, steps []schema.StepSpec, prog theory.ChordProgression, h []byte) {
+	switch style {
+	case offlineStyleHypnotic:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			notes := chordNotesOrRoot(chord)
+			steps[base] = schema.StepSpec{Active: true, Note: notes[0] + "3", Accent: true, Legato: true}
+			steps[base+1] = schema.StepSpec{Active: true, Note: notes[1] + "4", Legato: true}
+			steps[base+2] = schema.StepSpec{Active: true, Note: notes[2] + "4", Legato: true}
+		}
+	case offlineStyleDriving:
+		for i, chord := range prog.Chords {
+			base := i * 4
+			notes := chordNotesOrRoot(chord)
+			octaves := []string{"3", "4", "5", "4"}
+			for j := 0; j < 4; j++ {
+				note := notes[(j+int(h[(base+j)%len(h)]))%len(notes)] + octaves[j]
+				steps[base+j] = schema.StepSpec{Active: true, Note: note, Accent: j == 0, Staccato: j%2 == 1}
+			}
+		}
+	case offlineStyleMinimal:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			notes := chordNotesOrRoot(chord)
+			steps[base] = schema.StepSpec{Active: true, Note: notes[0] + "3", Accent: true, Staccato: true}
+			steps[base+2] = schema.StepSpec{Active: true, Note: notes[2] + "4", Staccato: true}
+			steps[base+3] = schema.StepSpec{Active: true, Note: notes[1] + "4", Ghost: true}
+		}
+	default:
+		mixGateArticulation(steps, h)
+	}
+}
+
+func applyMelodyOfflineStyle(style string, steps []schema.StepSpec, prog theory.ChordProgression, key theory.Key, h []byte, scaleNotes []string) {
+	switch style {
+	case offlineStyleHypnotic:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			note := closestChordTone(chordNotesOrRoot(chord), scaleNotes, characterDegree(key)) + "4"
+			if midi, _ := theory.NoteToMIDI(note); midi < 60 {
+				note = theory.NoteNameOnly(note) + "5"
+			}
+			steps[base] = schema.StepSpec{Active: true, Note: note, Accent: i == 2, Legato: true}
+		}
+	case offlineStyleDriving:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			notes := chordNotesOrRoot(chord)
+			steps[base] = schema.StepSpec{Active: true, Note: notes[0] + "5", Accent: i == 2}
+			steps[base+2] = schema.StepSpec{Active: true, Note: notes[(1+int(h[i])%2)] + "5", Staccato: true}
+		}
+	case offlineStyleMinimal:
+		clearSteps(steps)
+		for i, chord := range prog.Chords {
+			base := i * 4
+			steps[base+1] = schema.StepSpec{Active: true, Note: chord.Root + "4", Accent: i == 3, Staccato: true}
+		}
+	default:
+		mixGateArticulation(steps, h)
+	}
+}
+
+func applyPassingNotes(patternType string, steps []schema.StepSpec, prog theory.ChordProgression, key theory.Key, h []byte) {
+	maxActive := map[string]int{"bassline": 13, "melody": 10}[patternType]
+	if maxActive == 0 {
+		return
+	}
+	chance := 15 + int(h[20])%11
+	for i := range prog.Chords {
+		if activeStepCount(steps) >= maxActive || int(h[(21+i)%len(h)])%100 >= chance {
+			continue
+		}
+		base := i * 4
+		for pos := base + 1; pos <= base+3 && pos < len(steps); pos++ {
+			if !steps[pos].Active || steps[pos-1].Active {
+				continue
+			}
+			target := theory.NoteNameOnly(steps[pos].Note)
+			passing := passingNoteBefore(target, key)
+			if passing == "" || passing == target {
+				continue
+			}
+			steps[pos-1] = schema.StepSpec{
+				Active:   true,
+				Note:     passing + noteOctave(steps[pos].Note),
+				Ghost:    true,
+				Staccato: true,
+			}
+			break
+		}
+	}
+}
+
+func passingNoteBefore(target string, key theory.Key) string {
+	midi, err := theory.NoteToMIDI(target + "4")
+	if err == nil {
+		candidate := theory.NoteNameOnly(theory.MIDIToNote(midi - 1))
+		if inScale, scaleErr := theory.NoteInScale(candidate, key.Root, key.Scale); scaleErr == nil && inScale {
+			return candidate
+		}
+	}
+	return approachNote(target, key)
+}
+
+func noteOctave(note string) string {
+	if note == "" {
+		return "4"
+	}
+	last := note[len(note)-1]
+	if last >= '0' && last <= '9' {
+		return string(last)
+	}
+	return "4"
+}
+
+func chordNotesOrRoot(chord theory.ProgressionChord) []string {
+	notes, err := theory.ChordNotes(chord.Root, chord.Quality)
+	if err != nil || len(notes) < 3 {
+		return []string{chord.Root, chord.Root, chord.Root}
+	}
+	return notes
+}
+
+func clearSteps(steps []schema.StepSpec) {
+	for i := range steps {
+		steps[i] = schema.StepSpec{}
+	}
+}
+
+func activeStepCount(steps []schema.StepSpec) int {
+	count := 0
+	for _, step := range steps {
+		if step.Active {
+			count++
+		}
+	}
+	return count
+}
+
+func mixGateArticulation(steps []schema.StepSpec, h []byte) {
+	for i := range steps {
+		if !steps[i].Active || steps[i].Slide || steps[i].Ghost {
+			continue
+		}
+		switch h[i%len(h)] % 4 {
+		case 0:
+			steps[i].Legato = true
+		case 1:
+			steps[i].Staccato = true
+		}
+	}
+}
+
+func ensureGateVariation(steps []schema.StepSpec) {
+	hasLegato, hasStaccato := false, false
+	for _, step := range steps {
+		hasLegato = hasLegato || step.Legato
+		hasStaccato = hasStaccato || step.Staccato
+	}
+	if hasLegato && hasStaccato {
+		return
+	}
+	for i := range steps {
+		if !steps[i].Active || steps[i].Ghost || steps[i].Slide {
+			continue
+		}
+		if !hasLegato {
+			steps[i].Legato = true
+			steps[i].Staccato = false
+			hasLegato = true
+			continue
+		}
+		if !hasStaccato {
+			steps[i].Staccato = true
+			steps[i].Legato = false
+			return
+		}
+	}
+}
+
+func ensureMelodyMinDensity(steps []schema.StepSpec, prog theory.ChordProgression) {
+	const minActive = 4
+	if activeStepCount(steps) >= minActive {
+		return
+	}
+	for i, chord := range prog.Chords {
+		if activeStepCount(steps) >= minActive {
+			return
+		}
+		pos := i * 4
+		if steps[pos].Active {
+			continue
+		}
+		notes := chordNotesOrRoot(chord)
+		steps[pos] = schema.StepSpec{Active: true, Note: notes[0] + "5", Accent: i == 2, Legato: true}
+	}
 }
 
 func arpeggioTemplate(ctx MusicContext) *schema.PatternSpec {
@@ -132,8 +446,9 @@ func arpeggioTemplate(ctx MusicContext) *schema.PatternSpec {
 	seed := ctx.VariationSeed
 	bpm := ctx.BPM
 
-	h := seedHash(seed + "arp")
+	h := seedHash(seed + key.Root + key.Scale + "arp")
 	profileName := chooseArpProfile(key, bpm, h)
+	style := normalizeOfflineStyle(ctx.OfflineStyle)
 
 	steps := make([]schema.StepSpec, 16)
 
@@ -163,7 +478,7 @@ func arpeggioTemplate(ctx MusicContext) *schema.PatternSpec {
 
 		base := i * 4
 
-		arpPattern := h[(i+4)%32] % 6
+		arpPattern := chooseArpPattern(h, key, i)
 		if i > 0 && arpPattern == prevPattern {
 			arpPattern = (arpPattern + 1) % 6
 		}
@@ -203,6 +518,9 @@ func arpeggioTemplate(ctx MusicContext) *schema.PatternSpec {
 		}
 	}
 
+	applyArpOfflineStyle(style, steps, prog, h)
+	ensureGateVariation(steps)
+
 	sweepStyle := "medium"
 	if bpm >= 124 || key.Mode == "minor" {
 		sweepStyle = "dramatic"
@@ -227,8 +545,9 @@ func melodyTemplate(ctx MusicContext) *schema.PatternSpec {
 	seed := ctx.VariationSeed
 	bpm := ctx.BPM
 
-	h := seedHash(seed + "melody")
+	h := seedHash(seed + key.Root + key.Scale + "melody")
 	profileName := chooseMelodyProfile(key, bpm, h)
+	style := normalizeOfflineStyle(ctx.OfflineStyle)
 
 	scaleNotes, _ := theory.ScaleNotes(key.Root, key.Scale)
 	if len(scaleNotes) < 7 {
@@ -252,6 +571,8 @@ func melodyTemplate(ctx MusicContext) *schema.PatternSpec {
 		{true, false, false, false, false, true, false, false, false, false, true, false, false, false, false, false}, // very sparse (3 notes)
 		{true, false, false, true, false, false, false, true, false, false, true, false, false, false, true, false},   // syncopated
 		{true, false, false, false, true, false, true, false, false, false, false, false, true, false, false, false},  // call-response
+		{true, false, true, false, false, false, true, false, false, false, false, true, false, false, false, false},  // triplet-ish push
+		{true, false, false, false, false, false, true, false, false, false, true, false, false, true, false, false},  // tension-hold
 	}
 	rhythmIdx := int(h[10]) % len(rhythms)
 	rhythm := rhythms[rhythmIdx]
@@ -268,8 +589,8 @@ func melodyTemplate(ctx MusicContext) *schema.PatternSpec {
 		chord := prog.Chords[chordIdx]
 		chordTones, _ := theory.ChordNotes(chord.Root, chord.Quality)
 
-		degree := motifDegrees[motifNoteIdx%len(motifDegrees)]
-		noteName := scaleNotes[degree%len(scaleNotes)]
+		degree := normalizeDegree(shapeMelodyDegree(motifDegrees[motifNoteIdx%len(motifDegrees)], motifNoteIdx, key, h), len(scaleNotes))
+		noteName := scaleNotes[degree]
 
 		// Every other note gravitates toward chord tones
 		if motifNoteIdx%2 == 0 && len(chordTones) > 0 {
@@ -300,6 +621,13 @@ func melodyTemplate(ctx MusicContext) *schema.PatternSpec {
 		}
 		motifNoteIdx++
 	}
+
+	applyMelodyOfflineStyle(style, steps, prog, key, h, scaleNotes)
+	if style != offlineStyleHypnotic && style != offlineStyleMinimal {
+		applyPassingNotes("melody", steps, prog, key, h)
+	}
+	ensureMelodyMinDensity(steps, prog)
+	ensureGateVariation(steps)
 
 	return &schema.PatternSpec{
 		SpecVersion:   "1.0",
@@ -335,6 +663,77 @@ func buildHypnoticMotif(h []byte, length int, scaleNotes []string) []int {
 	}
 
 	return motif
+}
+
+func chooseArpPattern(h []byte, key theory.Key, section int) byte {
+	characterBias := byte(characterDegree(key) + len(key.Root))
+	return (h[(section+4)%32] + characterBias + byte(section)) % 6
+}
+
+func shapeMelodyDegree(degree, motifNoteIdx int, key theory.Key, h []byte) int {
+	contour := int(h[9]+byte(characterDegree(key))) % 3
+	switch contour {
+	case 0: // ascending arc
+		return degree + motifNoteIdx/2
+	case 1: // descending resolution
+		return degree - motifNoteIdx/2
+	default: // tension-hold around the mode's character note
+		if motifNoteIdx%3 == 1 {
+			return characterDegree(key)
+		}
+		return degree
+	}
+}
+
+func bassColorTone(key theory.Key, chord theory.ProgressionChord) string {
+	chordTones, err := theory.ChordNotes(chord.Root, chord.Quality)
+	if err != nil || len(chordTones) == 0 {
+		return chordThird(chord)
+	}
+
+	color := scaleDegreeName(key, characterDegree(key))
+	for _, tone := range chordTones {
+		if tone == color {
+			return color
+		}
+	}
+	return chordThird(chord)
+}
+
+func scaleDegreeName(key theory.Key, degree int) string {
+	scaleNotes, err := theory.ScaleNotes(key.Root, key.Scale)
+	if err != nil || len(scaleNotes) == 0 {
+		return key.Root
+	}
+	return scaleNotes[normalizeDegree(degree, len(scaleNotes))]
+}
+
+func normalizeDegree(degree, length int) int {
+	if length <= 0 {
+		return 0
+	}
+	degree %= length
+	if degree < 0 {
+		degree += length
+	}
+	return degree
+}
+
+func characterDegree(key theory.Key) int {
+	switch key.Scale {
+	case "minor_natural", "minor_harmonic":
+		return 5 // minor 6th, the darker Aeolian color
+	case "dorian":
+		return 5 // raised 6th
+	case "phrygian":
+		return 1 // flat 2nd
+	case "mixolydian":
+		return 6 // flat 7th
+	case "lydian":
+		return 3 // raised 4th
+	default:
+		return 4 // stable fifth for plain major
+	}
 }
 
 // buildBassEvolution creates evolution for bass — full energy, minimal density changes.
@@ -384,17 +783,16 @@ func chooseBassProfile(key theory.Key, bpm float64, h []byte) string {
 	}
 	if bpm >= 128 {
 		// High-energy techno — prefer driving
-		candidates := []string{"bass_techno_driving", "bass_progressive"}
+		candidates := []string{"bass_driving", "bass_progressive"}
 		if key.Mode == "minor" {
-			// Minor keys lean toward darker driving sound
-			return "bass_techno_driving"
+			return "bass_driving"
 		}
 		return candidates[int(h[0])%len(candidates)]
 	}
 	// Mid-range 118-127 — progressive house territory
 	candidates := []string{"bass_progressive"}
 	if key.Mode == "minor" {
-		candidates = append(candidates, "bass_techno_driving")
+		candidates = append(candidates, "bass_driving")
 	}
 	return candidates[int(h[0])%len(candidates)]
 }
@@ -448,6 +846,14 @@ func chordFifth(chord theory.ProgressionChord) string {
 		return chord.Root
 	}
 	return notes[2]
+}
+
+func chordThird(chord theory.ProgressionChord) string {
+	notes, err := theory.ChordNotes(chord.Root, chord.Quality)
+	if err != nil || len(notes) < 2 {
+		return chord.Root
+	}
+	return notes[1]
 }
 
 func closestChordTone(chordTones, scaleNotes []string, degree int) string {

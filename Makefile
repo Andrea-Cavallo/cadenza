@@ -129,7 +129,7 @@ docker-run:
 	docker run --rm -v $(PWD)/output:/app/output cadenza:latest --bpm 122 --key Am --no-llm
 
 docker-compose-up:
-	docker compose up llmidi-gen
+	docker compose up cadenza
 
 ## Clean
 

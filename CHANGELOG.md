@@ -8,6 +8,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Provider failure choice screen** (`handleProviderFailure`): when provider init fails in interactive mode, shows a menu — retry / switch to offline / switch to a different provider / cancel — instead of hard-exiting. Controlled by `cliConfig.Interactive` so flag mode and CI are unaffected.
+- **`--doctor` flag**: runs `runDoctorCheck`, which prints a diagnostic report: Go runtime version, API key presence (Claude, OpenAI, Gemini), Ollama reachability, and output directory writability.
+- **`--non-interactive` flag**: explicitly forces flag mode (skips TUI); useful in CI and headless scripts. Requires `--bpm` and `--key` (or `--from-spec`) to be present.
+- **Absolute output paths**: the success screen now prints `filepath.Abs(f)` for each generated MIDI file so the path is directly usable in any working directory.
+- **`cliConfig.Interactive` field**: set to `true` by `runInteractiveCLI`; gates interactive-only behaviour like the provider failure screen.
+- **Doctor tests**: `TestRunDoctorCheck`, `TestPrintDoctorItem`, `TestCheckOllamaReachable` (with httptest server).
+- **Provider failure tests**: `TestHandleProviderFailure` covers retry, switch-to-offline, switch-provider, cancel, and invalid-then-cancel paths.
+- **Interactive flag test**: `TestRunInteractiveCLI_SetsInteractive` asserts `cfg.Interactive = true` after a successful guided session.
+
+
+- **Genre presets**: four built-in presets (`progressive-warmup`, `peak-time-driver`, `afterhours-hypnotic`, `festival-melodic`) — each pre-fills key, BPM, groove, and offline style. Accessible via `--preset <name>` flag and via interactive preset picker before the full guided session.
+- **Expanded post-run actions**: interactive menu now offers 8 options — new session, same setup, same harmony + new motifs (locked progression), A/B compare (outputs to `A/` and `B/` subdirs), faster (+6 BPM), slower (-6 BPM), busier (driving style), sparser (hypnotic style).
+- **BPM hint after key confirmation**: `keyBPMHint()` shows typical BPM range for the chosen mode in the interactive key selector.
+- **`progressionToCLIString()`**: converts a `ChordProgression` to `Am-F-C-G` format for the `--progression` flag; used by same-harmony action to lock the progression.
+- **`lastRunInfo` state tracking**: successful generations update a package-level `lastRun` struct, enabling post-run actions to reference the prior seed and chord progression.
+- **`clampBPM()`**: bounds BPM to [80, 150] for faster/slower directional actions.
+- **README rewrite (P1)**: opening paragraph leads with what you hear; added "Install (one-liner)", "Why Cadenza?", "Producer Workflow" sections; updated Features list with all new capabilities.
+- **`--offline-style` CLI flag**: exposes `MusicContext.OfflineStyle` to non-interactive flag mode (`hypnotic | driving | minimal | melodic`); validated by `validateFlags`.
+- **Energy selector (1–5) in interactive CLI**: new `selectEnergy()` step between mode selection and tempo; maps energy level to groove preset and offline style suggestion; Enter skips.
+- **Musical mood description after key confirmation**: `keyMoodDescription()` prints a producer-friendly emotional character summary (e.g. "A natural minor — dark, introspective, club-friendly") immediately after scale notes.
+- **Reproduce command after every successful run**: `reproduceCmd()` builds and prints the exact CLI command to recreate any generation, including seed, provider, groove, offline style, and custom progression.
+- **`OfflineStyle` shown in interactive summary**: `printSummary()` now shows GROOVE and STYLE when non-default values are active.
+- **Coverage milestone**: `cmd/cadenza` now at 80.3% (up from 67.9%) — P3 SonarCloud quality gate passed for this package.
+- **New dev mode tests**: `TestRunDevMode_QuitAndCommands`, `TestDevGenerate`, `TestDevValidate` cover the interactive REPL, generation, and validation helpers.
+- **New CLI helper tests**: `TestKeyMoodDescription`, `TestReproduce`, `TestRunInteractiveCLI_WithEnergy`, `TestConfirmInteractiveRender_Branches`, `TestProviderHelpers`, `TestModeLabel_AllModes`, `TestSelectEnergy_InvalidInput`.
+
+
+- **Offline key differentiation**: seedHash for all three offline pattern generators (bass, arp, melody) now includes `key.Root + key.Scale` so identical seeds produce distinct rhythmic patterns for different keys (not just different root notes).
+- **Chord third in bass patterns**: `chordThird()` helper added; cases 0 and 4 of `basslineTemplate` now incorporate the chord's third note (minor 3rd for dark minor feel, major 3rd for brighter major/Dorian quality).
+- **Expanded melody rhythm pool**: two additional rhythm patterns added (`triplet-ish push`, `tension-hold`) for 7 total — ensures ≥6 distinct patterns across 20 seeds.
+- **Bass density guarantee**: `ensureBassMinDensity()` enforces ≥8 active steps by filling off-beat positions with ghost notes when the hash selects too many sparse patterns.
+- **Key-character offline shaping**: basslines now prefer mode character tones when chord-safe, arpeggios bias direction by key+seed, and melodies choose ascending, descending, or tension-hold contours from the same key-aware seed hash.
+- **Cache seed regression test**: `TestKeyIncludesVariationSeed` verifies different variation seeds produce different SHA256 disk-cache keys.
+- **Interactive modal key regression test**: CLI key selection is covered for modal examples so Dorian, Phrygian, Mixolydian, and Lydian prompts stay visible.
+- **Mode-character prompt injection**: LLM prompts now receive a key-specific mode description with scale notes, interval character, and emotional color through `{{MODE_CHARACTER}}`.
+- **Offline sub-modes**: `MusicContext.OfflineStyle` now supports `melodic`, `hypnotic`, `driving`, and `minimal` deterministic templates for bassline, arpeggio, and melody.
+- **Offline passing notes and gate variation**: offline templates add seed-controlled 15-25% passing-note opportunities where scale-safe, and every generated pattern mixes legato and staccato articulation.
+- **Offline quality tests**: added regression coverage for rhythmic figure counts, sub-mode density/validation, passing notes, and gate variation.
+- **Tests `TestOfflineSeedDiversity` and `TestOfflineKeyDifferentiation`**: assert ≥6 distinct step fingerprints from 20 seeds (all three pattern types) and that Am/Dm with the same seed produce different rhythmic structures.
+- **Modal scale support**: `ParseKey` now accepts `-dorian`, `-phrygian`, `-mixolydian`, `-lydian` suffixes (e.g. `Am-dorian`, `G-mixolydian`), case-insensitive, with or without leading `m`.
+- **Expanded chord quality map**: `scaleChordQualities` now covers Dorian, Phrygian, Mixolydian, and Lydian modes with correct diatonic chord qualities computed from each mode's interval structure.
+- **Expanded progression pools**: Minor (Aeolian) and Major (Ionian) pools grown from 4 to 12 progressions each; Dorian, Phrygian, Mixolydian, and Lydian each have 8 dedicated progressions. Seed entropy now sufficient: 10 consecutive seeds produce ≥ 6 distinct progressions.
+- **Mixolydian and Lydian scales** added to `scaleIntervals` (previously only Dorian and Phrygian were present).
+- **Musical regression tests**: `TestProgressionSeedDiversity`, `TestKeyDifferentiation`, `TestProgressionPool_Modal`, `TestParseKey_Modal`, `TestParseKey_Modal_Invalid` added to `internal/theory`.
+- Rewrote `TODO.md` with prioritised P0/P1/P2/P3 structure, checkboxes, and root-cause analysis for the zero-star problem.
+
+### Fixed
+- **`approachNote` now stays diatonic**: was generating a chromatic semitone below the chord root, violating the "notes must be in the declared scale" invariant and causing the validator to reject offline templates for certain chord roots (e.g. Dm → C#2 in A minor context). Now returns the nearest scale degree below the root instead.
+- **`chooseBassProfile` profile name corrected**: was returning `"bass_techno_driving"` (not in the validator's allowed profile list) for high-BPM minor keys; corrected to `"bass_driving"`.
+
+### Removed
+- **`cmd/llmidi-gen/` deleted**: the original prototype binary was superseded by `cmd/cadenza` (which uses `GenerateWithContext`, supports 4 providers, variations, grooves, drums, dry-run, watch mode, and dev mode). Having two entry points confused contributors and users.
+- Fixed `docker-compose-up` Makefile target which still referenced the deleted `llmidi-gen` service.
+
+### Added
 - Added `TODO.md` coverage plan quantifying the gap to 80% and prioritizing missing tests by package.
 
 ### Changed
@@ -17,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored CLI, generator, and LLM coverage tests into smaller helpers to clear remaining Sonar cognitive-complexity and Go idiom warnings without reducing coverage.
 - Rewrote the README in English, Italian, and Spanish and highlighted offline algorithmic generation as a core strength rather than a fallback.
 - Expanded the README with practical post-clone setup, build, and run instructions for Windows, macOS, and Linux users.
+- Improved the interactive CLI with a quick-start offline sketch path, clearer provider availability guidance, and output-directory writability checks before rendering.
+- Expanded the interactive CLI post-run flow with explicit next actions, including rerunning the same setup with a fresh seed.
 
 ### Removed
 - **Dead code cleanup** — Removed 480+ lines of unused code identified through static analysis

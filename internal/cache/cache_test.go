@@ -122,3 +122,13 @@ func TestKeyDeterministic(t *testing.T) {
 		t.Fatal("different input parts should produce different keys")
 	}
 }
+
+func TestKeyIncludesVariationSeed(t *testing.T) {
+	c := New(30, t.TempDir())
+
+	seed1 := c.key("claude", "bassline", "A", "minor", "seed-1", "prompt-hash")
+	seed2 := c.key("claude", "bassline", "A", "minor", "seed-2", "prompt-hash")
+	if seed1 == seed2 {
+		t.Fatal("different variation seeds must not share the same cache key")
+	}
+}

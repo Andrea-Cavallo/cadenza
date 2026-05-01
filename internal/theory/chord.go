@@ -18,10 +18,21 @@ var chordIntervals = map[string][]int{
 	"sus4":  {0, 5, 7},
 }
 
+// scaleChordQualities maps each scale type to the chord quality built on each degree (I-VII).
+// Computed from stacking diatonic thirds on each scale degree.
+//
+// Dorian example: i, ii, bIII, IV, v, vi dim, bVII.
+// Phrygian example: i, bII, bIII, iv, v dim, bVI, bvii.
+// Mixolydian example: I, ii, iii dim, IV, v, vi, bVII.
+// Lydian example: I, II, iii, #iv dim, V, vi, vii.
 var scaleChordQualities = map[string][]string{
 	"major":          {"major", "minor", "minor", "major", "major", "minor", "dim"},
 	"minor_natural":  {"minor", "dim", "major", "minor", "minor", "major", "major"},
 	"minor_harmonic": {"minor", "dim", "aug", "minor", "major", "major", "dim"},
+	"dorian":         {"minor", "minor", "major", "major", "minor", "dim", "major"},
+	"phrygian":       {"minor", "major", "major", "minor", "dim", "major", "minor"},
+	"mixolydian":     {"major", "minor", "dim", "major", "minor", "minor", "major"},
+	"lydian":         {"major", "major", "minor", "dim", "major", "minor", "minor"},
 }
 
 func ChordNotes(root, quality string) ([]string, error) {

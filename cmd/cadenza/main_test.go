@@ -19,19 +19,25 @@ func TestValidateFlags(t *testing.T) {
 		t.Fatalf("write spec file: %v", err)
 	}
 
-	if err := validateFlags(16, 1, "straight", "", 122, "Am"); err != nil {
+	if err := validateFlags(16, 1, "straight", "", "", 122, "Am"); err != nil {
 		t.Fatalf("unexpected validateFlags error: %v", err)
 	}
-	if err := validateFlags(12, 1, "straight", "", 122, "Am"); err == nil {
+	if err := validateFlags(12, 1, "straight", "", "", 122, "Am"); err == nil {
 		t.Fatal("expected bars validation error")
 	}
-	if err := validateFlags(16, 0, "straight", "", 122, "Am"); err == nil {
+	if err := validateFlags(16, 0, "straight", "", "", 122, "Am"); err == nil {
 		t.Fatal("expected variations validation error")
 	}
-	if err := validateFlags(16, 1, "swing-nope", "", 122, "Am"); err == nil {
+	if err := validateFlags(16, 1, "swing-nope", "", "", 122, "Am"); err == nil {
 		t.Fatal("expected groove validation error")
 	}
-	if err := validateFlags(16, 1, "straight", specPath, 122, "Am"); err != nil {
+	if err := validateFlags(16, 1, "straight", "", "bad-style", 122, "Am"); err == nil {
+		t.Fatal("expected offline-style validation error")
+	}
+	if err := validateFlags(16, 1, "straight", "", "hypnotic", 122, "Am"); err != nil {
+		t.Fatalf("valid offline-style should pass: %v", err)
+	}
+	if err := validateFlags(16, 1, "straight", specPath, "", 122, "Am"); err != nil {
 		t.Fatalf("existing from-spec path should pass: %v", err)
 	}
 }
@@ -216,4 +222,143 @@ func TestRunFromSpecAndWatchMode(t *testing.T) {
 			t.Fatalf("unexpected watch generation output %q", out)
 		}
 	})
+}
+
+func TestHandlePostRunAction(t *testing.T) {
+	t.Run("exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		withInput("q\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit")
+			}
+		})
+	})
+
+	t.Run("same setup new seed then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		withInput("2\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after rerun")
+			}
+		})
+		files, err := filepath.Glob(filepath.Join(cfg.OutputDir, "*.mid"))
+		if err != nil {
+			t.Fatalf("glob midi files: %v", err)
+		}
+		if len(files) != 3 {
+			t.Fatalf("expected 3 midi files after same-setup rerun, got %d", len(files))
+		}
+	})
+
+	t.Run("same harmony new motifs then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		lastRun = lastRunInfo{Seed: "123", ProgCLI: "Am-F-C-G", BPM: 122, Key: "Am"}
+		withInput("3\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after same-harmony")
+			}
+		})
+		files, _ := filepath.Glob(filepath.Join(cfg.OutputDir, "*.mid"))
+		if len(files) != 3 {
+			t.Fatalf("expected 3 midi files after same-harmony, got %d", len(files))
+		}
+	})
+
+	t.Run("faster then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		cfg.BPM = 122
+		withInput("5\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after faster")
+			}
+		})
+	})
+
+	t.Run("slower then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		cfg.BPM = 122
+		withInput("6\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after slower")
+			}
+		})
+	})
+
+	t.Run("busier then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		withInput("7\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after busier")
+			}
+		})
+	})
+
+	t.Run("sparser then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		withInput("8\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after sparser")
+			}
+		})
+	})
+
+	t.Run("AB compare then exit", func(t *testing.T) {
+		outDir := t.TempDir()
+		cfg := testCLIConfig(outDir)
+		withInput("4\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after AB compare")
+			}
+		})
+		filesA, _ := filepath.Glob(filepath.Join(outDir, "A", "*.mid"))
+		filesB, _ := filepath.Glob(filepath.Join(outDir, "B", "*.mid"))
+		if len(filesA) != 3 || len(filesB) != 3 {
+			t.Fatalf("expected 3 files in A and 3 in B, got A=%d B=%d", len(filesA), len(filesB))
+		}
+	})
+
+	t.Run("invalid then exit", func(t *testing.T) {
+		cfg := testCLIConfig(t.TempDir())
+		withInput("bad\nq\n", func() {
+			if handlePostRunAction(cfg) {
+				t.Fatal("expected post-run exit after invalid")
+			}
+		})
+	})
+}
+
+func TestProgressionToCLIString(t *testing.T) {
+	prog, err := parseCustomProgression("Am-F-C-G", "Am", 16)
+	if err != nil {
+		t.Fatalf("parseCustomProgression: %v", err)
+	}
+	got := progressionToCLIString(prog)
+	if got != "Am-F-C-G" {
+		t.Fatalf("expected Am-F-C-G, got %q", got)
+	}
+}
+
+func TestClampBPM(t *testing.T) {
+	if clampBPM(50) != 80 {
+		t.Fatal("expected 80 for clamp below min")
+	}
+	if clampBPM(200) != 150 {
+		t.Fatal("expected 150 for clamp above max")
+	}
+	if clampBPM(122) != 122 {
+		t.Fatal("expected 122 unchanged")
+	}
+}
+
+func TestApplyGenrePreset(t *testing.T) {
+	cfg := cliConfig{Groove: "straight"}
+	if !applyGenrePreset(&cfg, "progressive-warmup") {
+		t.Fatal("expected progressive-warmup to apply")
+	}
+	if cfg.Key != "Am-dorian" || cfg.BPM != 122 || cfg.OfflineStyle != "melodic" {
+		t.Fatalf("unexpected preset cfg %+v", cfg)
+	}
+	if applyGenrePreset(&cfg, "unknown-preset") {
+		t.Fatal("expected unknown preset to return false")
+	}
 }

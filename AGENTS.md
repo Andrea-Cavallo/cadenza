@@ -1,12 +1,17 @@
 # AGENTS.md — LLMIDI-Gen
 
 AI-powered MIDI generator: Go 1.25, LLM-driven, progressive house / melodic techno.
+**IMPORTANT:** Always read TODO.md first for the most current project status and work priorities.
+This file provides architectural overview; TODO.md contains actionable tasks.
+
+**Core Focus:** The primary goal is musical quality — generating hypnotic, varied, and musically interesting patterns, especially in offline mode (`--no-llm`). All architectural decisions serve this goal.
 
 ## Project Overview
+Takes **BPM + Key** as input, produces **3 MIDI files** (bassline, arpeggio, melody). 
+A shared chord progression ensures harmonic coherence. The LLM creates musical motifs; 
+the renderer applies professional timing, velocity, and automation deterministically via style profiles. 
+Offline mode (`--no-llm`) generates hypnotic, varied patterns algorithmically.
 
-Takes **BPM + Key** as input, produces **3 MIDI files** (bassline, arpeggio, melody). A shared chord progression ensures harmonic coherence. The LLM creates musical motifs; the renderer applies professional timing, velocity, and automation deterministically via style profiles. Offline mode (`--no-llm`) generates hypnotic, varied patterns algorithmically.
-
-**Specs:** `"C:\Users\Andrea\Desktop\midillmnew-master\midillm_go-master\docs\superpowers\specs\2026-04-29-midi-examples-design.md"` is the source of truth for architecture, PatternSpec schema, style profiles, and musical rules.
 
 ## Architecture
 
@@ -26,6 +31,25 @@ User (BPM + Key)
 - **Validator** enforces: note range, scale membership, density, chord coherence, BPM bounds
 - **Offline mode** owns: seed-based algorithmic pattern generation (no API calls)
 
+## Implementation Order
+
+```
+P0-binary
+  → P0-0a (seed entropy)
+  → P0-0b (key differentiation)
+  → P0-0c (modal support)
+  → P0-0d (LLM prompt quality)
+  → P0-0e (offline hypnotic patterns)
+    → P1 (README + demo — only after music sounds good)
+      → P2-Phase1
+      → P2-Phase2
+      → P2-Phase3 + Phase4
+        → P3 (coverage gaps from modal work)
+```
+
+> **Rule:** Do not start P1 (README / demo audio) until P0 music quality is solved.
+> A bad demo hurts more than no demo.
+
 ## Key Directories
 
 | Path | Purpose |
@@ -33,7 +57,7 @@ User (BPM + Key)
 | `cmd/cadenza/` | CLI entry point, interactive mode |
 | `internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
 | `internal/schema/` | PatternSpec types + musical validator (with chord coherence check) |
-| `internal/llm/` | Provider interface, Codex (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
+| `internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
 | `internal/renderer/` | MIDI rendering: velocity, timing, gate, sweep, evolution, portamento |
 | `internal/renderer/styleprofile/` | Deterministic style profiles with DynamicCurve (crescendo/arch) |
 | `internal/generator/` | Chord progression gen + single/multi-pattern generation + offline templates + LLM cache integration |
@@ -81,7 +105,7 @@ These are **invariants** the renderer enforces regardless of LLM output:
 
 ## LLM Integration
 
-- **Codex:** `tool_use` with `generate_pattern` tool forces structurally valid JSON — retry only for musical violations
+- **Claude:** `tool_use` with `generate_pattern` tool forces structurally valid JSON — retry only for musical violations
 - **Ollama:** JSON schema format object (full schema in `format` field) — retry handles both structural and musical errors
 - **System prompt:** Persistent rules and constraints sent via `System` field; user message contains only the specific generation task
 - **Retry:** max 3 attempts; classifies errors as structural (JSON parse) vs musical (validation); different correction prompts for each
@@ -99,7 +123,7 @@ make build
 # Cross-compile all platforms
 make build-all
 
-# With Codex
+# With Claude
 export ANTHROPIC_API_KEY=sk-...
 go run ./cmd/cadenza/ --bpm 122 --key Am
 
@@ -179,7 +203,7 @@ SONAR_TOKEN=<your-token> make sonar
 
 ## Guidelines
 
-1. **Read SPECS.md first** when touching musical logic — it defines the exact behavior
+1. **Read TODO.md first** when touching musical logic — it defines the exact behavior
 2. **Style profiles are deterministic** — don't add randomness to velocity/timing/gate
 3. **Chord progression is the harmonic contract** — all 3 generators must respect it
 4. **Validator errors become correction prompts** — keep error messages human-readable

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,53 @@ func TestCLIInputHelpers(t *testing.T) {
 	})
 }
 
+func TestKeyMoodDescription(t *testing.T) {
+	cases := map[string]string{
+		"minor":      "dark",
+		"major":      "bright",
+		"dorian":     "Dorian",
+		"phrygian":   "Phrygian",
+		"mixolydian": "Mixolydian",
+		"lydian":     "Lydian",
+		"unknown":    "A unknown",
+	}
+	for mode, want := range cases {
+		got := keyMoodDescription("A", mode)
+		if !strings.Contains(got, want) {
+			t.Fatalf("keyMoodDescription(A, %q) = %q, want substring %q", mode, got, want)
+		}
+	}
+}
+
+func TestReproduce(t *testing.T) {
+	cfg := cliConfig{BPM: 122, Key: "Am", NoLLM: true, Bars: 16, Groove: "straight"}
+	got := reproduceCmd(cfg, "12345")
+	if !strings.Contains(got, "--bpm 122") || !strings.Contains(got, "--key Am") ||
+		!strings.Contains(got, "--seed 12345") || !strings.Contains(got, "--no-llm") {
+		t.Fatalf("unexpected reproduce cmd %q", got)
+	}
+	// straight groove and default bars should not appear
+	if strings.Contains(got, "--groove") || strings.Contains(got, "--bars") {
+		t.Fatalf("default values should be omitted from reproduce cmd %q", got)
+	}
+
+	// with non-default options
+	cfg2 := cliConfig{BPM: 128, Key: "Dm-dorian", NoLLM: true, Bars: 32, Groove: "mpc60", OfflineStyle: "driving"}
+	got2 := reproduceCmd(cfg2, "99")
+	for _, want := range []string{"--bpm 128", "--key Dm-dorian", "--seed 99", "--no-llm", "--bars 32", "--groove mpc60", "--offline-style driving"} {
+		if !strings.Contains(got2, want) {
+			t.Fatalf("expected %q in reproduce cmd %q", want, got2)
+		}
+	}
+
+	// AI provider
+	cfg3 := cliConfig{BPM: 122, Key: "Am", NoLLM: false, ProviderName: "claude", Model: "claude-opus-4-7", Bars: 16, Groove: "straight"}
+	got3 := reproduceCmd(cfg3, "42")
+	if !strings.Contains(got3, "--provider claude") || !strings.Contains(got3, "--model claude-opus-4-7") {
+		t.Fatalf("expected provider/model in reproduce cmd %q", got3)
+	}
+}
+
 func TestCLIHelperFunctions(t *testing.T) {
 	cases := map[float64]string{
 		90:  "Downtempo / Ambient",
@@ -75,8 +123,8 @@ func TestCLIHelperFunctions(t *testing.T) {
 	if got := modeLabel("minor"); !strings.Contains(got, "Aeolian") {
 		t.Fatalf("unexpected minor label %q", got)
 	}
-	if got := modeLabel("dorian"); got != "dorian" {
-		t.Fatalf("unexpected passthrough label %q", got)
+	if got := modeLabel("dorian"); !strings.Contains(got, "Dorian") {
+		t.Fatalf("unexpected dorian label %q", got)
 	}
 	if got := scaleNoteString("A", "minor_natural"); !strings.Contains(got, "A") {
 		t.Fatalf("unexpected scale string %q", got)
@@ -91,6 +139,7 @@ func TestCLIFlowHelpers(t *testing.T) {
 	testSelectModeQuit(t)
 	testSelectLLMEngineFallback(t)
 	testSelectLLMEngineOllama(t)
+	testSelectLLMEngineOpenAI(t)
 	testSelectTempo(t)
 	testSelectKey(t)
 }
@@ -119,13 +168,61 @@ func TestPrintSummaryAndBanner(t *testing.T) {
 }
 
 func TestRunInteractiveCLI_OfflineHappyPath(t *testing.T) {
-	withInput("2\n122\nAm\nexport-dir\ny\n", func() {
+	// flow: no quick start → skip preset → offline mode → skip energy → 122 BPM → Am → export-dir → confirm
+	withInput("n\ns\n2\n\n122\nAm\nexport-dir\ny\n", func() {
 		cfg, ok := runInteractiveCLI()
 		if !ok {
 			t.Fatal("expected interactive flow to complete")
 		}
 		if cfg.NoLLM != true || cfg.BPM != 122 || cfg.Key != "Am" || cfg.OutputDir != "export-dir" {
 			t.Fatalf("unexpected cfg %+v", cfg)
+		}
+	})
+}
+
+func TestRunInteractiveCLI_WithEnergy(t *testing.T) {
+	// flow: no quick start → skip preset → offline mode → energy 3 → 122 BPM → Am → export-dir → confirm
+	withInput("n\ns\n2\n3\n122\nAm\nexport-dir\ny\n", func() {
+		cfg, ok := runInteractiveCLI()
+		if !ok {
+			t.Fatal("expected interactive flow with energy to complete")
+		}
+		if cfg.Groove != "mpc60" {
+			t.Fatalf("expected groove mpc60 from energy preset 3, got %q", cfg.Groove)
+		}
+		if cfg.OfflineStyle != "driving" {
+			t.Fatalf("expected offline style driving from energy preset 3, got %q", cfg.OfflineStyle)
+		}
+	})
+}
+
+func TestRunInteractiveCLI_GenrePreset(t *testing.T) {
+	// flow: no quick start → preset 2 (peak-time-driver) → export-dir → confirm
+	withInput("n\n2\nexport-preset\ny\n", func() {
+		cfg, ok := runInteractiveCLI()
+		if !ok {
+			t.Fatal("expected genre preset flow to complete")
+		}
+		if cfg.Key != "Am" || cfg.BPM != 130 {
+			t.Fatalf("expected peak-time-driver preset (Am 130), got key=%q bpm=%.0f", cfg.Key, cfg.BPM)
+		}
+		if cfg.OfflineStyle != "driving" {
+			t.Fatalf("expected driving style from peak-time-driver, got %q", cfg.OfflineStyle)
+		}
+	})
+}
+
+func TestRunInteractiveCLI_QuickStart(t *testing.T) {
+	withInput("y\ny\n", func() {
+		cfg, ok := runInteractiveCLI()
+		if !ok {
+			t.Fatal("expected quick start flow to complete")
+		}
+		if !cfg.NoLLM || cfg.BPM != 122 || cfg.Key != "Am" {
+			t.Fatalf("unexpected quick start cfg %+v", cfg)
+		}
+		if !strings.Contains(cfg.OutputDir, "output") {
+			t.Fatalf("expected timestamped output dir, got %q", cfg.OutputDir)
 		}
 	})
 }
@@ -234,6 +331,22 @@ func testSelectLLMEngineOllama(t *testing.T) {
 	})
 }
 
+func testSelectLLMEngineOpenAI(t *testing.T) {
+	t.Helper()
+	t.Run("select llm engine openai", func(t *testing.T) {
+		t.Setenv("OPENAI_API_KEY", "openai-test-key")
+		cfg := cliConfig{}
+		withInput("3\n\n", func() {
+			if !selectLLMEngine(&cfg) {
+				t.Fatal("expected openai selection to succeed")
+			}
+		})
+		if cfg.ProviderName != "openai" || cfg.Model != "gpt-4o" {
+			t.Fatalf("unexpected openai cfg %+v", cfg)
+		}
+	})
+}
+
 func testSelectTempo(t *testing.T) {
 	t.Helper()
 	t.Run("select tempo", func(t *testing.T) {
@@ -256,6 +369,165 @@ func testSelectKey(t *testing.T) {
 		})
 		if cfg.Key != "Am" {
 			t.Fatalf("expected key Am, got %q", cfg.Key)
+		}
+	})
+	t.Run("select modal key", func(t *testing.T) {
+		var cfg cliConfig
+		out := captureStdout(t, func() {
+			withInput("Dm-dorian\n", func() {
+				selectKey(&cfg)
+			})
+		})
+		if cfg.Key != "Dm-dorian" {
+			t.Fatalf("expected modal key Dm-dorian, got %q", cfg.Key)
+		}
+		for _, want := range []string{"Dorian", "Phrygian", "Mixolydian", "Lydian"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("expected modal selector output to include %q, got %q", want, out)
+			}
+		}
+	})
+}
+
+func TestConfirmInteractiveRender_Branches(t *testing.T) {
+	t.Run("invalid then no", func(t *testing.T) {
+		cfg := cliConfig{BPM: 122, Key: "Am"}
+		withInput("bad\nn\n", func() {
+			_, ok := confirmInteractiveRender(cfg)
+			if ok {
+				t.Fatal("expected cancel after invalid then no")
+			}
+		})
+	})
+}
+
+func TestWantsQuickStart_InvalidThenNo(t *testing.T) {
+	withInput("maybe\nn\n", func() {
+		if wantsQuickStart() {
+			t.Fatal("expected false after invalid then no")
+		}
+	})
+}
+
+func TestProviderHelpers(t *testing.T) {
+	if got := providerEnvVar("gemini"); got != "GEMINI_API_KEY" {
+		t.Fatalf("expected GEMINI_API_KEY, got %q", got)
+	}
+	if got := providerEnvVar("unknown"); got != "" {
+		t.Fatalf("expected empty for unknown provider, got %q", got)
+	}
+	if got := providerSetupHint("openai"); !strings.Contains(got, "OPENAI_API_KEY") {
+		t.Fatalf("expected openai hint, got %q", got)
+	}
+	if got := providerSetupHint("gemini"); !strings.Contains(got, "GEMINI_API_KEY") {
+		t.Fatalf("expected gemini hint, got %q", got)
+	}
+	if got := providerSetupHint("unknown"); got != "" {
+		t.Fatalf("expected empty for unknown provider hint, got %q", got)
+	}
+}
+
+func TestKeyBPMHint(t *testing.T) {
+	modes := []string{"minor", "major", "dorian", "phrygian", "mixolydian", "lydian", "unknown"}
+	for _, mode := range modes {
+		got := keyBPMHint(mode)
+		if !strings.Contains(got, "BPM") {
+			t.Fatalf("keyBPMHint(%q) missing BPM: %q", mode, got)
+		}
+	}
+}
+
+func TestModeLabel_AllModes(t *testing.T) {
+	cases := map[string]string{
+		"phrygian":   "Phrygian",
+		"mixolydian": "Mixolydian",
+		"lydian":     "Lydian",
+		"unknown":    "unknown",
+	}
+	for mode, want := range cases {
+		got := modeLabel(mode)
+		if !strings.Contains(got, want) {
+			t.Fatalf("modeLabel(%q) = %q, want substring %q", mode, got, want)
+		}
+	}
+}
+
+func TestSelectEnergy_InvalidInput(t *testing.T) {
+	cfg := cliConfig{Groove: "straight"}
+	withInput("bad\n6\n2\n", func() {
+		selectEnergy(&cfg)
+	})
+	if cfg.OfflineStyle != "melodic" {
+		t.Fatalf("expected energy 2 → melodic, got %q", cfg.OfflineStyle)
+	}
+}
+
+func TestHandleProviderFailure(t *testing.T) {
+	t.Run("retry same provider", func(t *testing.T) {
+		cfg := cliConfig{ProviderName: "claude"}
+		withInput("1\n", func() {
+			if !handleProviderFailure(&cfg, fmt.Errorf("api key missing")) {
+				t.Fatal("expected true (retry)")
+			}
+		})
+		if cfg.NoLLM {
+			t.Fatal("NoLLM must remain false for retry")
+		}
+	})
+
+	t.Run("switch to offline", func(t *testing.T) {
+		cfg := cliConfig{ProviderName: "claude"}
+		withInput("2\n", func() {
+			if !handleProviderFailure(&cfg, fmt.Errorf("api key missing")) {
+				t.Fatal("expected true (switch offline)")
+			}
+		})
+		if !cfg.NoLLM {
+			t.Fatal("expected NoLLM=true after switching to offline")
+		}
+	})
+
+	t.Run("cancel", func(t *testing.T) {
+		cfg := cliConfig{ProviderName: "claude"}
+		withInput("4\n", func() {
+			if handleProviderFailure(&cfg, fmt.Errorf("api key missing")) {
+				t.Fatal("expected false (cancel)")
+			}
+		})
+	})
+
+	t.Run("invalid then cancel", func(t *testing.T) {
+		cfg := cliConfig{ProviderName: "claude"}
+		withInput("bad\nq\n", func() {
+			if handleProviderFailure(&cfg, fmt.Errorf("some error")) {
+				t.Fatal("expected false after invalid then cancel")
+			}
+		})
+	})
+
+	t.Run("switch provider to ollama", func(t *testing.T) {
+		cfg := cliConfig{ProviderName: "claude"}
+		// choice 3 → selectLLMEngine → pick 2 (ollama) → default model (Enter)
+		withInput("3\n2\nllama3\n", func() {
+			if !handleProviderFailure(&cfg, fmt.Errorf("some error")) {
+				t.Fatal("expected true after switching provider")
+			}
+		})
+		if cfg.ProviderName != "ollama" {
+			t.Fatalf("expected ollama after provider switch, got %q", cfg.ProviderName)
+		}
+	})
+}
+
+func TestRunInteractiveCLI_SetsInteractive(t *testing.T) {
+	// flow: no quick start → skip preset → offline mode → skip energy → 122 BPM → Am → export-dir → confirm
+	withInput("n\ns\n2\n\n122\nAm\nexport-dir2\ny\n", func() {
+		cfg, ok := runInteractiveCLI()
+		if !ok {
+			t.Fatal("expected flow to complete")
+		}
+		if !cfg.Interactive {
+			t.Fatal("expected Interactive=true from runInteractiveCLI")
 		}
 	})
 }

@@ -17,8 +17,22 @@
 
 </p>
 
-> AI-powered MIDI generator for progressive house and melodic techno.  
-> Give it a BPM and a musical key, get three harmonically coherent MIDI files back.
+> Three tracks. One key. One command.  
+> Drop them straight into your DAW — in under 2 seconds, without leaving the terminal.
+
+---
+
+## Install
+
+```bash
+go install github.com/Andrea-Cavallo/cadenza/cmd/cadenza@latest
+```
+
+Then run immediately:
+
+```bash
+cadenza --bpm 122 --key Am --no-llm
+```
 
 ---
 
@@ -32,11 +46,45 @@
 
 ## English
 
-### What is Cadenza?
+### What does it sound like?
 
-Cadenza turns a BPM and a key into three MIDI files: bassline, arpeggio, and melody. All three parts share the same chord progression, so the result is coherent and ready to drop into a DAW.
+Cadenza generates a **bassline**, an **arpeggio**, and a **melody** that all share the same chord progression. The result is a harmonically coherent sketch, ready to import at the correct BPM and layered for mixing.
 
-The project can run with an LLM, but one of its biggest strengths is that it also works extremely well without one.
+The patterns are designed for progressive house and melodic techno — hypnotic, rhythmically tight, and musically usable, not just technically valid.
+
+### Why Cadenza?
+
+No other Go CLI generates harmonically coherent multi-track MIDI from a single BPM + key input — offline, in under 2 seconds.
+
+Most MIDI tools either require a DAW, a plugin, or call an external API for every generation. Cadenza does not. Offline mode works entirely algorithmically: no API calls, no network, no cost, no latency. The result is deterministic, reproducible by seed, and musically varied.
+
+Key differentiators:
+- **Modal scale support** — not just major and minor. Dorian, Phrygian, Mixolydian, Lydian are all first-class.
+- **Genre presets** — `progressive-warmup`, `peak-time-driver`, `afterhours-hypnotic`, `festival-melodic` pre-fill BPM, key, groove, and style with one flag.
+- **Seed reproducibility** — every run prints a reproduce command. Paste it tomorrow and get the exact same patterns.
+- **Post-run iteration** — same harmony with new motifs, A/B compare, faster/slower/busier/sparser without re-entering the flow.
+
+### Producer Workflow
+
+A typical Cadenza session looks like this:
+
+```
+1.  cadenza                           # start interactive mode
+    → pick a genre preset, or configure manually
+    → choose key, energy level, BPM
+    → confirm and render
+
+2.  Import all 3 MIDI files into DAW at the printed BPM.
+    Assign instruments: bass synth, pluck/pad, lead.
+
+3.  In the terminal, keep iterating:
+    [3] Same harmony, new motifs      # re-rolls motifs, keeps chord progression
+    [5] Faster (+6 BPM)               # nudges energy up
+    [4] A/B compare                   # generates two variations in A/ and B/ folders
+
+4.  Found something you like? Copy the Reproduce command from the output.
+    Run it later, in CI, or in a script to recreate the exact same patterns.
+```
 
 ### Offline mode is a core feature
 
@@ -46,20 +94,24 @@ Offline mode:
 
 - makes zero API calls
 - generates musically useful, hypnotic patterns algorithmically
+- supports all four offline sub-modes: `hypnotic`, `driving`, `minimal`, `melodic`
 - keeps harmonic coherence, timing, velocity, and renderer quality
 - is fast, reproducible, cheap, and reliable in CI, Docker, and local workflows
-
-If you want to sketch ideas quickly, test arrangements, or avoid API cost and network dependency, offline mode is often the best way to use Cadenza.
 
 ### Features
 
 - One command, three MIDI files
 - Shared chord progression across bassline, arpeggio, and melody
+- Modal scale support: Natural Minor, Major, Dorian, Phrygian, Mixolydian, Lydian
+- Genre presets: `--preset progressive-warmup|peak-time-driver|afterhours-hypnotic|festival-melodic`
+- Offline style sub-modes: `--offline-style hypnotic|driving|minimal|melodic`
+- Energy selector (1–5) in interactive mode
+- Post-run iteration: same harmony, A/B compare, faster/slower/busier/sparser
+- Reproduce command printed after every run
 - Deterministic renderer with timing, velocity, gate, sweep, and portamento rules
 - Claude, Ollama, OpenAI, and Gemini support
-- Strong offline generation with `--no-llm`
 - Graceful fallback to offline templates if an LLM fails
-- LLM response cache
+- LLM response cache (30-day TTL, SHA256-keyed)
 - Static binaries with `CGO_ENABLED=0`
 
 ### Requirements
@@ -78,6 +130,13 @@ Check your Go version:
 go version
 ```
 
+### Install (one-liner)
+
+```bash
+go install github.com/Andrea-Cavallo/cadenza/cmd/cadenza@latest
+cadenza --bpm 122 --key Am --no-llm
+```
+
 ### Use it immediately without building
 
 If you just cloned the repo and want to try it right away:
@@ -86,7 +145,7 @@ If you just cloned the repo and want to try it right away:
 go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 ```
 
-This is the fastest first run.
+In interactive mode, choose a genre preset or configure manually. The energy selector and key mood description guide tempo and style choices.
 
 ### Build after cloning
 

@@ -22,6 +22,16 @@ import (
 
 var version = "dev"
 
+// lastRunInfo holds state from the most recent successful generation for post-run actions.
+type lastRunInfo struct {
+	Seed    string
+	ProgCLI string // "Am-F-C-G" format for --progression flag
+	BPM     float64
+	Key     string
+}
+
+var lastRun lastRunInfo
+
 func main() {
 	// Load config from cadenza.yaml / env vars via Viper
 	appCfg, cfgErr := config.Load()
@@ -59,16 +69,26 @@ func main() {
 	grooveFlag := flag.String("groove", appCfg.Audio.Groove, "Timing preset: straight, mpc60, linndrum, humanize")
 	dumpSpecFlag := flag.String("dump-spec", "", "Dump PatternSpec YAML to directory")
 	fromSpecFlag := flag.String("from-spec", "", "Re-render from PatternSpec file (bypasses LLM)")
+	offlineStyleFlag := flag.String("offline-style", "", "Offline pattern style: hypnotic, driving, minimal, melodic")
+	presetFlag := flag.String("preset", "", "Genre preset: progressive-warmup, peak-time-driver, afterhours-hypnotic, festival-melodic")
 
-	watchFlag := flag.Bool("watch", false, "Watch mode: stay in loop, Enter generates new variation, 'q' exits")
-	dryRunFlag := flag.Bool("dry-run", false, "Execute pipeline without writing files, print summary")
-	devFlag := flag.Bool("dev", false, "Interactive dev mode REPL")
+	watchFlag          := flag.Bool("watch", false, "Watch mode: stay in loop, Enter generates new variation, 'q' exits")
+	dryRunFlag         := flag.Bool("dry-run", false, "Execute pipeline without writing files, print summary")
+	devFlag            := flag.Bool("dev", false, "Interactive dev mode REPL")
+	doctorFlag         := flag.Bool("doctor", false, "Run diagnostics: Go version, API keys, Ollama, output directory")
+	nonInteractiveFlag := flag.Bool("non-interactive", false, "Non-interactive mode: require --bpm and --key, skip TUI")
 
 	flag.Parse()
 
 	if *versionFlag {
 		fmt.Printf("cadenza %s\n", version)
 		os.Exit(0)
+	}
+
+	if *doctorFlag {
+		setupLogger(*outputFlag, appCfg)
+		runDoctorCheck(*outputFlag)
+		return
 	}
 
 	if *devFlag {
@@ -90,12 +110,43 @@ func main() {
 		"cache.enabled", appCfg.Cache.Enabled,
 	)
 
-	if err := validateFlags(*barsFlag, *variationsFlag, *grooveFlag, *fromSpecFlag, *bpmFlag, *keyFlag); err != nil {
+	if err := validateFlags(*barsFlag, *variationsFlag, *grooveFlag, *fromSpecFlag, *offlineStyleFlag, *bpmFlag, *keyFlag); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	flagMode := *bpmFlag != 0 || *keyFlag != "" || *fromSpecFlag != "" || *watchFlag || *noLLMFlag
+	// Apply genre preset before flag-mode detection so preset fills BPM/key
+	if *presetFlag != "" {
+		presetCfg := cliConfig{Bars: *barsFlag, Variations: *variationsFlag, Groove: *grooveFlag, OutputDir: *outputFlag}
+		if !applyGenrePreset(&presetCfg, *presetFlag) {
+			fmt.Fprintf(os.Stderr, "Error: unknown preset %q. Valid: progressive-warmup, peak-time-driver, afterhours-hypnotic, festival-melodic\n", *presetFlag)
+			os.Exit(1)
+		}
+		if *bpmFlag != 0 {
+			presetCfg.BPM = *bpmFlag
+		}
+		if *keyFlag != "" {
+			presetCfg.Key = *keyFlag
+		}
+		presetCfg.NoLLM = *noLLMFlag || presetCfg.NoLLM
+		presetCfg.ProviderName = *providerFlag
+		presetCfg.Model = *modelFlag
+		presetCfg.Seed = func() *uint64 {
+			if *seedFlag != 0 {
+				return seedFlag
+			}
+			return nil
+		}()
+		presetCfg.Drums = *drumsFlag
+		presetCfg.DryRun = *dryRunFlag
+		if presetCfg.Model == "" {
+			presetCfg.Model = resolveDefaultModel(presetCfg.ProviderName, appCfg)
+		}
+		runGeneration(presetCfg)
+		return
+	}
+
+	flagMode := *bpmFlag != 0 || *keyFlag != "" || *fromSpecFlag != "" || *watchFlag || *noLLMFlag || *nonInteractiveFlag
 	if flagMode {
 		if *fromSpecFlag == "" && (*bpmFlag == 0 || *keyFlag == "") {
 			fmt.Fprintln(os.Stderr, "Usage: cadenza --bpm 122 --key Am [OPTIONS]")
@@ -128,6 +179,7 @@ func main() {
 			DumpSpec:     *dumpSpecFlag,
 			FromSpec:     *fromSpecFlag,
 			DryRun:       *dryRunFlag,
+			OfflineStyle: *offlineStyleFlag,
 		}
 		if cfg.Model == "" {
 			cfg.Model = resolveDefaultModel(cfg.ProviderName, appCfg)
@@ -148,46 +200,138 @@ func main() {
 				break
 			}
 			runGeneration(cfg)
-
-			fmt.Println()
-			fmt.Printf("  %sGenerate another session?%s [Y/n] › ", ansiBold, ansiReset)
-			ans, _ := stdinReader.ReadString('\n')
-			ans = strings.TrimSpace(strings.ToLower(ans))
-			if ans == "n" || ans == "no" {
-				fmt.Printf("\n  %s✕  Session closed.%s\n\n", ansiDim, ansiReset)
+			if !handlePostRunAction(cfg) {
 				break
 			}
-			fmt.Println()
 		}
 	}
 }
 
+func handlePostRunAction(cfg cliConfig) bool {
+	for {
+		fmt.Println()
+		fmt.Printf("  %sNEXT%s\n\n", ansiDim+ansiWhite, ansiReset)
+		fmt.Printf("  %s[1]%s  New guided session\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[2]%s  Same setup, new seed\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[3]%s  Same harmony, new motifs\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[4]%s  A/B compare  (two adjacent seeds)\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[5]%s  Faster  (+6 BPM)\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[6]%s  Slower  (-6 BPM)\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[7]%s  Busier  (driving style)\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[8]%s  Sparser (hypnotic style)\n", ansiYellow+ansiBold, ansiReset)
+		fmt.Printf("  %s[q]%s  Exit\n\n", ansiYellow+ansiBold, ansiReset)
+
+		switch strings.ToLower(ask("Choose")) {
+		case "", "1":
+			fmt.Println()
+			return true
+
+		case "2":
+			fmt.Println()
+			cfg.Seed = nil
+			runGeneration(cfg)
+
+		case "3":
+			// Same harmony (lock progression), new motifs (new seed)
+			locked := cfg
+			locked.Seed = nil
+			if lastRun.ProgCLI != "" {
+				locked.Progression = lastRun.ProgCLI
+			}
+			fmt.Printf("\n  %s-> Locked progression: %s%s\n\n", ansiGreen, locked.Progression, ansiReset)
+			runGeneration(locked)
+
+		case "4":
+			// A/B compare: two seeds, output in sub-folders A and B
+			fmt.Printf("\n  %s═══ Variation A ═══%s\n\n", ansiCyan+ansiBold, ansiReset)
+			cfgA := cfg
+			cfgA.Seed = nil
+			cfgA.OutputDir = filepath.Join(cfg.OutputDir, "A")
+			runGeneration(cfgA)
+			fmt.Printf("\n  %s═══ Variation B ═══%s\n\n", ansiCyan+ansiBold, ansiReset)
+			cfgB := cfg
+			cfgB.Seed = nil
+			cfgB.OutputDir = filepath.Join(cfg.OutputDir, "B")
+			runGeneration(cfgB)
+			fmt.Printf("  %sA → %s%s\n", ansiDim, cfgA.OutputDir, ansiReset)
+			fmt.Printf("  %sB → %s%s\n\n", ansiDim, cfgB.OutputDir, ansiReset)
+			fmt.Printf("  %sImport A and B into your DAW and compare side by side.%s\n\n", ansiDim, ansiReset)
+
+		case "5":
+			faster := cfg
+			faster.Seed = nil
+			faster.BPM = clampBPM(cfg.BPM + 6)
+			fmt.Printf("\n  %s-> %.0f BPM (+6)%s\n\n", ansiGreen, faster.BPM, ansiReset)
+			runGeneration(faster)
+			cfg = faster
+
+		case "6":
+			slower := cfg
+			slower.Seed = nil
+			slower.BPM = clampBPM(cfg.BPM - 6)
+			fmt.Printf("\n  %s-> %.0f BPM (-6)%s\n\n", ansiGreen, slower.BPM, ansiReset)
+			runGeneration(slower)
+			cfg = slower
+
+		case "7":
+			busier := cfg
+			busier.Seed = nil
+			busier.OfflineStyle = "driving"
+			busier.NoLLM = true
+			fmt.Printf("\n  %s-> Driving style (busier, denser patterns)%s\n\n", ansiGreen, ansiReset)
+			runGeneration(busier)
+
+		case "8":
+			sparser := cfg
+			sparser.Seed = nil
+			sparser.OfflineStyle = "hypnotic"
+			sparser.NoLLM = true
+			fmt.Printf("\n  %s-> Hypnotic style (sparse, meditative patterns)%s\n\n", ansiGreen, ansiReset)
+			runGeneration(sparser)
+
+		case "q", "quit", "exit":
+			fmt.Printf("\n  %sSession closed.%s\n\n", ansiDim, ansiReset)
+			return false
+
+		default:
+			fmt.Printf("  %s-> Enter 1–8 or q%s\n", ansiRed, ansiReset)
+		}
+	}
+}
+
+func clampBPM(bpm float64) float64 {
+	if bpm < 80 {
+		return 80
+	}
+	if bpm > 150 {
+		return 150
+	}
+	return bpm
+}
+
 // validateFlags checks new CLI flags for correctness.
-func validateFlags(bars, variations int, groove, fromSpec string, bpm float64, key string) error {
-	// Validate bars (must be power of 2)
+func validateFlags(bars, variations int, groove, fromSpec, offlineStyle string, bpm float64, key string) error {
 	if bars != 16 && bars != 32 && bars != 64 && bars != 128 {
 		return fmt.Errorf("--bars must be one of: 16, 32, 64, 128 (got %d)", bars)
 	}
-
-	// Validate variations
 	if variations < 1 || variations > 100 {
 		return fmt.Errorf("--variations must be between 1 and 100 (got %d)", variations)
 	}
-
-	// Validate groove
 	validGrooves := map[string]bool{"straight": true, "mpc60": true, "linndrum": true, "humanize": true}
 	if !validGrooves[groove] {
 		return fmt.Errorf("--groove must be one of: straight, mpc60, linndrum, humanize (got %q)", groove)
 	}
-
-	// If --from-spec is set, --bpm and --key are optional (read from spec)
-	// Otherwise they're required (checked in main)
+	if offlineStyle != "" {
+		validStyles := map[string]bool{"hypnotic": true, "driving": true, "minimal": true, "melodic": true}
+		if !validStyles[offlineStyle] {
+			return fmt.Errorf("--offline-style must be one of: hypnotic, driving, minimal, melodic (got %q)", offlineStyle)
+		}
+	}
 	if fromSpec != "" {
 		if _, err := os.Stat(fromSpec); err != nil {
 			return fmt.Errorf("--from-spec file not found: %w", err)
 		}
 	}
-
 	return nil
 }
 
@@ -300,7 +444,17 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 
 	provider, err := buildProvider(cfg.NoLLM, cfg.ProviderName, cfg.Model, cfg.OllamaURL)
 	if err != nil {
-		return fmt.Errorf("provider init: %w", err)
+		if cfg.Interactive {
+			if !handleProviderFailure(&cfg, err) {
+				return fmt.Errorf("provider init: %w", err)
+			}
+			provider, err = buildProvider(cfg.NoLLM, cfg.ProviderName, cfg.Model, cfg.OllamaURL)
+			if err != nil {
+				return fmt.Errorf("provider init after recovery: %w", err)
+			}
+		} else {
+			return fmt.Errorf("provider init: %w", err)
+		}
 	}
 
 	v := schema.NewValidator()
@@ -336,6 +490,7 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 		VariationSeed:    seedStr,
 		ChordProgression: prog,
 		Groove:           cfg.Groove,
+		OfflineStyle:     cfg.OfflineStyle,
 	}
 
 	fmt.Printf("  %sRendering MIDI tracks...%s\n\n", ansiCyan+ansiBold, ansiReset)
@@ -401,13 +556,13 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 		outputFiles = result.Files
 	}
 
-	// Print results
+	// Print results with absolute paths so users can find files easily
 	fmt.Println(sepLine)
 	fmt.Println()
 	for _, f := range outputFiles {
-		rel, _ := filepath.Rel(cfg.OutputDir, f)
-		label := trackLabel(rel)
-		fmt.Printf("  %s✓%s  %-13s %s%s%s\n", ansiGreen+ansiBold, ansiReset, label, ansiDim, rel, ansiReset)
+		abs, _ := filepath.Abs(f)
+		label := trackLabel(f)
+		fmt.Printf("  %s✓%s  %-13s %s%s%s\n", ansiGreen+ansiBold, ansiReset, label, ansiDim, abs, ansiReset)
 	}
 	fmt.Println()
 	fmt.Printf("  %sSeed:%s       %s\n", ansiBold, ansiReset, seedStr)
@@ -423,7 +578,10 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 	fmt.Println()
 	fmt.Printf("  %sImport all %d file(s) to your DAW.%s\n", ansiDim, len(outputFiles), ansiReset)
 	fmt.Printf("  %sTune BPM to %.0f — tracks share the same progression.%s\n\n", ansiDim, cfg.BPM, ansiReset)
+	fmt.Printf("  %sReproduce:%s  %s%s%s\n", ansiBold, ansiReset, ansiCyan, reproduceCmd(cfg, seedStr), ansiReset)
+	fmt.Printf("  %s           Run this command again to recreate these exact patterns.%s\n\n", ansiDim, ansiReset)
 
+	lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key}
 	slog.Info("session complete", "files", len(outputFiles), "seed", seedStr, "bars", cfg.Bars)
 	return nil
 }
@@ -477,6 +635,45 @@ func runFromSpec(cfg cliConfig) {
 	fmt.Println()
 	fmt.Println(sepLine)
 	fmt.Println()
+}
+
+// progressionToCLIString converts a chord progression to the "--progression" flag format "Am-F-C-G".
+func progressionToCLIString(prog theory.ChordProgression) string {
+	parts := make([]string, len(prog.Chords))
+	for i, c := range prog.Chords {
+		parts[i] = c.Root + theory.QualitySuffix(c.Quality)
+	}
+	return strings.Join(parts, "-")
+}
+
+// reproduceCmd builds the exact CLI command that recreates this generation.
+func reproduceCmd(cfg cliConfig, seed string) string {
+	var sb strings.Builder
+	sb.WriteString("cadenza")
+	fmt.Fprintf(&sb, " --bpm %.0f", cfg.BPM)
+	fmt.Fprintf(&sb, " --key %s", cfg.Key)
+	fmt.Fprintf(&sb, " --seed %s", seed)
+	if cfg.NoLLM {
+		sb.WriteString(" --no-llm")
+	} else {
+		fmt.Fprintf(&sb, " --provider %s", cfg.ProviderName)
+		if cfg.Model != "" {
+			fmt.Fprintf(&sb, " --model %s", cfg.Model)
+		}
+	}
+	if cfg.Bars != 16 {
+		fmt.Fprintf(&sb, " --bars %d", cfg.Bars)
+	}
+	if cfg.Groove != "straight" && cfg.Groove != "" {
+		fmt.Fprintf(&sb, " --groove %s", cfg.Groove)
+	}
+	if cfg.OfflineStyle != "" {
+		fmt.Fprintf(&sb, " --offline-style %s", cfg.OfflineStyle)
+	}
+	if cfg.Progression != "" {
+		fmt.Fprintf(&sb, " --progression %s", cfg.Progression)
+	}
+	return sb.String()
 }
 
 func progressionStringForLog(prog theory.ChordProgression) string {

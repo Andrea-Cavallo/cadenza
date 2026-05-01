@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,6 +82,9 @@ func TestGeneratorHelpers_ReturnUsefulData(t *testing.T) {
 
 	if hashA, hashB := hashContent([]byte("alpha")), hashContent([]byte("alpha")); hashA != hashB || len(hashA) == 0 {
 		t.Fatalf("hashContent should be deterministic: %q %q", hashA, hashB)
+	}
+	if got := modeCharacterDescription(theory.Key{Root: "D", Mode: "dorian", Scale: "dorian"}); !strings.Contains(got, "raised 6th") {
+		t.Fatalf("expected Dorian mode character to mention raised 6th, got %q", got)
 	}
 
 	example := exampleSpecJSON("bassline")
@@ -344,7 +348,7 @@ func assertOfflineProfileSelection(t *testing.T, minorKey, majorKey theory.Key, 
 	if chooseBassProfile(majorKey, 110, hash) == "" {
 		t.Fatal("expected low-bpm bass profile")
 	}
-	if prof := chooseBassProfile(minorKey, 130, hash); prof != "bass_techno_driving" {
+	if prof := chooseBassProfile(minorKey, 130, hash); prof != "bass_driving" {
 		t.Fatalf("expected minor high-bpm driving bass, got %q", prof)
 	}
 	if prof := chooseArpProfile(majorKey, 110, hash); prof != "arp_flowing" {
@@ -369,7 +373,186 @@ func assertOfflineSequenceBuilders(t *testing.T, minorKey theory.Key, hash []byt
 	if len(buildHypnoticMotif(hash, 5, []string{"A", "B", "C", "D", "E", "F", "G"})) != 5 {
 		t.Fatal("expected motif length 5")
 	}
+	if got := bassColorTone(minorKey, theory.ProgressionChord{Root: "F", Quality: "major"}); got != "F" {
+		t.Fatalf("expected A minor color tone F over F major, got %q", got)
+	}
+	lydianKey := theory.Key{Root: "C", Mode: "lydian", Scale: "lydian"}
+	if got := bassColorTone(lydianKey, theory.ProgressionChord{Root: "D", Quality: "major"}); got != "F#" {
+		t.Fatalf("expected C lydian raised fourth F# over D major, got %q", got)
+	}
+	if got := scaleDegreeName(lydianKey, -1); got != "B" {
+		t.Fatalf("expected wrapped scale degree B, got %q", got)
+	}
+	if chooseArpPattern(hash, minorKey, 0) == chooseArpPattern(hash, lydianKey, 0) {
+		t.Fatal("expected key character to bias arpeggio pattern selection")
+	}
 	if len(seedHash("abc")) != 32 {
 		t.Fatal("expected sha256 hash bytes")
+	}
+}
+
+// TestOfflineSeedDiversity asserts that seeds 1-20 produce meaningfully different
+// rhythmic patterns for all three pattern types. "Different" means distinct step
+// activity bitmasks — not just different root notes.
+func TestOfflineSeedDiversity(t *testing.T) {
+	amKey := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "base-seed")
+
+	baseCtx := MusicContext{Key: amKey, ChordProgression: prog, BPM: 124}
+
+	patternTypes := []string{"bassline", "arpeggio", "melody"}
+	for _, pt := range patternTypes {
+		t.Run(pt, func(t *testing.T) {
+			fingerprints := make(map[string]bool)
+			for seed := 1; seed <= 20; seed++ {
+				ctx := baseCtx
+				ctx.VariationSeed = fmt.Sprintf("seed-%d", seed)
+				spec := offlineTemplate(pt, ctx)
+				if spec == nil {
+					t.Fatalf("seed %d: nil spec", seed)
+				}
+				fingerprints[stepActivityFingerprint(spec.Motif.Steps)] = true
+			}
+			if len(fingerprints) < 6 {
+				t.Errorf("%s: only %d distinct step patterns from 20 seeds (want ≥6)", pt, len(fingerprints))
+			}
+		})
+	}
+}
+
+// TestOfflineKeyDifferentiation asserts that Am and Dm with the same seed
+// produce different rhythmic patterns (not just different root notes).
+func TestOfflineKeyDifferentiation(t *testing.T) {
+	amKey := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	dmKey := theory.Key{Root: "D", Scale: "minor_natural", Mode: "minor"}
+
+	amProg := theory.SelectProgression("A", "minor_natural", "seed-X")
+	dmProg := theory.SelectProgression("D", "minor_natural", "seed-X")
+
+	for _, pt := range []string{"bassline", "arpeggio", "melody"} {
+		t.Run(pt, func(t *testing.T) {
+			amSpec := offlineTemplate(pt, MusicContext{Key: amKey, ChordProgression: amProg, BPM: 124, VariationSeed: "seed-X"})
+			dmSpec := offlineTemplate(pt, MusicContext{Key: dmKey, ChordProgression: dmProg, BPM: 124, VariationSeed: "seed-X"})
+
+			if amSpec == nil || dmSpec == nil {
+				t.Fatal("nil spec")
+			}
+			amFP := stepActivityFingerprint(amSpec.Motif.Steps)
+			dmFP := stepActivityFingerprint(dmSpec.Motif.Steps)
+			if amFP == dmFP {
+				t.Errorf("%s: Am and Dm produce identical step patterns with same seed", pt)
+			}
+		})
+	}
+}
+
+// stepActivityFingerprint returns a compact string representing which steps are active,
+// accented, ghost, or slide — capturing rhythmic structure independent of root note.
+func TestOfflineSubModesValidateAndShapeDensity(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "style-seed")
+	validator := schema.NewValidator()
+
+	for _, style := range []string{offlineStyleMelodic, offlineStyleHypnotic, offlineStyleDriving, offlineStyleMinimal} {
+		t.Run(style, func(t *testing.T) {
+			ctx := MusicContext{
+				BPM:              124,
+				Key:              key,
+				ChordProgression: prog,
+				VariationSeed:    "style-seed",
+				OfflineStyle:     style,
+			}
+			for _, patternType := range []string{"bassline", "arpeggio", "melody"} {
+				spec := offlineTemplate(patternType, ctx)
+				if spec == nil {
+					t.Fatalf("%s: nil spec", patternType)
+				}
+				if err := validator.ValidateWithChords(spec, prog); err != nil {
+					t.Fatalf("%s %s did not validate: %v", style, patternType, err)
+				}
+				assertGateVariation(t, spec)
+			}
+		})
+	}
+
+	hypnoticBass := offlineTemplate("bassline", MusicContext{BPM: 124, Key: key, ChordProgression: prog, VariationSeed: "style-seed", OfflineStyle: offlineStyleHypnotic})
+	if got := activeStepCount(hypnoticBass.Motif.Steps); got != 8 {
+		t.Fatalf("hypnotic bass should stay sparse at 8 active steps, got %d", got)
+	}
+	drivingArp := offlineTemplate("arpeggio", MusicContext{BPM: 124, Key: key, ChordProgression: prog, VariationSeed: "style-seed", OfflineStyle: offlineStyleDriving})
+	if got := activeStepCount(drivingArp.Motif.Steps); got != 16 {
+		t.Fatalf("driving arpeggio should fill all 16 steps, got %d", got)
+	}
+	minimalMelody := offlineTemplate("melody", MusicContext{BPM: 124, Key: key, ChordProgression: prog, VariationSeed: "style-seed", OfflineStyle: offlineStyleMinimal})
+	if got := activeStepCount(minimalMelody.Motif.Steps); got != 4 {
+		t.Fatalf("minimal melody should use exactly 4 active steps, got %d", got)
+	}
+}
+
+func TestOfflineRhythmicFigureCountAndPassingNotes(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "figure-seed")
+	baseCtx := MusicContext{BPM: 124, Key: key, ChordProgression: prog}
+
+	for _, patternType := range []string{"bassline", "arpeggio", "melody"} {
+		fingerprints := make(map[string]bool)
+		for seed := 1; seed <= 20; seed++ {
+			ctx := baseCtx
+			ctx.VariationSeed = fmt.Sprintf("figure-%d", seed)
+			spec := offlineTemplate(patternType, ctx)
+			fingerprints[stepActivityFingerprint(spec.Motif.Steps)] = true
+		}
+		if len(fingerprints) < 4 {
+			t.Fatalf("%s has only %d rhythmic figures, want at least 4", patternType, len(fingerprints))
+		}
+	}
+
+	foundPassing := false
+	for seed := 1; seed <= 100 && !foundPassing; seed++ {
+		ctx := baseCtx
+		ctx.VariationSeed = fmt.Sprintf("passing-%d", seed)
+		spec := offlineTemplate("melody", ctx)
+		for _, step := range spec.Motif.Steps {
+			if step.Active && step.Ghost && step.Staccato {
+				foundPassing = true
+				break
+			}
+		}
+	}
+	if !foundPassing {
+		t.Fatal("expected deterministic passing-note probability to create at least one ghost staccato passing note")
+	}
+}
+
+func stepActivityFingerprint(steps []schema.StepSpec) string {
+	b := make([]byte, len(steps))
+	for i, s := range steps {
+		var v byte
+		if s.Active {
+			v |= 1
+		}
+		if s.Accent {
+			v |= 2
+		}
+		if s.Ghost {
+			v |= 4
+		}
+		if s.Slide {
+			v |= 8
+		}
+		b[i] = '0' + v
+	}
+	return string(b)
+}
+
+func assertGateVariation(t *testing.T, spec *schema.PatternSpec) {
+	t.Helper()
+	hasLegato, hasStaccato := false, false
+	for _, step := range spec.Motif.Steps {
+		hasLegato = hasLegato || step.Legato
+		hasStaccato = hasStaccato || step.Staccato
+	}
+	if !hasLegato || !hasStaccato {
+		t.Fatalf("%s should mix legato and staccato gates, legato=%v staccato=%v", spec.PatternType, hasLegato, hasStaccato)
 	}
 }

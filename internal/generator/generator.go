@@ -25,6 +25,7 @@ type MusicContext struct {
 	VariationSeed    string
 	ChordProgression theory.ChordProgression
 	Groove           string // timing preset: straight, mpc60, linndrum, humanize
+	OfflineStyle     string // melodic, hypnotic, driving, minimal
 }
 
 // SingleGenerator handles one pattern type generation via LLM with caching.
@@ -89,6 +90,7 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 	prompt := strings.ReplaceAll(string(promptTemplate), "{{KEY}}", musicCtx.Key.Root)
 	prompt = strings.ReplaceAll(prompt, "{{MODE}}", musicCtx.Key.Mode)
 	prompt = strings.ReplaceAll(prompt, "{{SCALE}}", musicCtx.Key.Scale)
+	prompt = strings.ReplaceAll(prompt, "{{MODE_CHARACTER}}", modeCharacterDescription(musicCtx.Key))
 	prompt = strings.ReplaceAll(prompt, "{{BPM}}", fmt.Sprintf("%.0f", musicCtx.BPM))
 	prompt = strings.ReplaceAll(prompt, "{{SEED}}", musicCtx.VariationSeed)
 	prompt = strings.ReplaceAll(prompt, "{{CHORD_PROGRESSION}}", chordStr)
@@ -186,4 +188,34 @@ func progressionStringDetailed(prog theory.ChordProgression) string {
 func hashContent(content []byte) string {
 	h := sha256.Sum256(content)
 	return hex.EncodeToString(h[:8]) // Use first 8 bytes for brevity
+}
+
+func modeCharacterDescription(key theory.Key) string {
+	scale := scaleNoteStringForPrompt(key)
+	switch key.Scale {
+	case "major":
+		return fmt.Sprintf("Ionian / major (%s): bright and anthemic; character intervals are major 3rd, major 6th, and major 7th.", scale)
+	case "minor_natural":
+		return fmt.Sprintf("Aeolian / natural minor (%s): dark, introspective, club-friendly; character intervals are minor 3rd, minor 6th, and minor 7th.", scale)
+	case "minor_harmonic":
+		return fmt.Sprintf("Harmonic minor (%s): dark with a leading-tone pull; character intervals are minor 3rd, minor 6th, and major 7th.", scale)
+	case "dorian":
+		return fmt.Sprintf("Dorian (%s): dark groove with a hopeful lift; character intervals are minor 3rd, raised 6th, and minor 7th.", scale)
+	case "phrygian":
+		return fmt.Sprintf("Phrygian (%s): tense and shadowy; character intervals are flat 2nd, minor 3rd, and minor 7th.", scale)
+	case "mixolydian":
+		return fmt.Sprintf("Mixolydian (%s): open and festival-ready; character intervals are major 3rd and flat 7th.", scale)
+	case "lydian":
+		return fmt.Sprintf("Lydian (%s): floating and luminous; character intervals are major 3rd, raised 4th, and major 7th.", scale)
+	default:
+		return fmt.Sprintf("%s (%s): use chord tones first and treat scale color notes as tension.", key.Mode, scale)
+	}
+}
+
+func scaleNoteStringForPrompt(key theory.Key) string {
+	notes, err := theory.ScaleNotes(key.Root, key.Scale)
+	if err != nil || len(notes) == 0 {
+		return key.Root
+	}
+	return strings.Join(notes, " ")
 }
