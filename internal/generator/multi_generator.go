@@ -115,6 +115,40 @@ func (mg *MultiGenerator) GenerateWithContext(ctx context.Context, musicCtx Musi
 	return mg.generateInternal(ctx, musicCtx, varNum)
 }
 
+// GeneratePartWithContext generates and renders a single pattern type while
+// preserving the same musical context used for a full three-part session.
+func (mg *MultiGenerator) GeneratePartWithContext(ctx context.Context, musicCtx MusicContext, patternType string, varNum int) (*GenerationResult, error) {
+	if !isKnownPatternType(patternType) {
+		return nil, fmt.Errorf("unknown pattern type %q", patternType)
+	}
+
+	spec, err := mg.generatePattern(ctx, musicCtx, patternType)
+	if err != nil {
+		return nil, err
+	}
+
+	ts := time.Now().Format("20060102_150405")
+	keyStr := musicCtx.Key.Root
+	if musicCtx.Key.Mode == "minor" {
+		keyStr += "m"
+	}
+	path, err := mg.renderAndSave(patternType, spec, keyStr, ts, varNum, musicCtx.BPM)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GenerationResult{
+		Files:         []string{path},
+		VariationSeed: musicCtx.VariationSeed,
+		BPM:           musicCtx.BPM,
+		Key:           keyStr,
+	}, nil
+}
+
+func isKnownPatternType(patternType string) bool {
+	return patternType == "bassline" || patternType == "arpeggio" || patternType == "melody"
+}
+
 func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicContext, varNum int) (*GenerationResult, error) {
 	metrics.GenerationsTotal.Add(1)
 	ts := time.Now().Format("20060102_150405")
@@ -159,6 +193,14 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 		}
 		patterns[r.patternType] = r.spec
 	}
+	arrangementScore := schema.ScoreArrangement(patterns)
+	slog.Info("arrangement score",
+		"peak_section_by_track", arrangementScore.PeakSectionByTrack,
+		"all_tracks_peak_same_section", arrangementScore.AllTracksPeakSameSection,
+		"melody_arp_pitch_collision", arrangementScore.MelodyArpPitchCollision,
+		"melody_arp_register_collision", arrangementScore.MelodyArpRegisterCollision,
+		"warnings", arrangementScore.Warnings,
+	)
 
 	var outputFiles []string
 	keyStr := musicCtx.Key.Root

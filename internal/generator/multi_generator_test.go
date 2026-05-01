@@ -12,6 +12,7 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/renderer"
 	"github.com/Andrea-Cavallo/cadenza/internal/renderer/styleprofile"
 	"github.com/Andrea-Cavallo/cadenza/internal/schema"
+	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
 func mockBasslineJSON() []byte {
@@ -119,6 +120,37 @@ func TestMultiGenerator_VariationSeedSet(t *testing.T) {
 
 	if result.VariationSeed == "" {
 		t.Error("variation seed must not be empty")
+	}
+}
+
+func TestMultiGenerator_GenerateSinglePart(t *testing.T) {
+	outDir := t.TempDir()
+	mg := newTestMultiGenerator(t, outDir)
+	parsedKey, err := theory.ParseKey("Am")
+	if err != nil {
+		t.Fatalf("parse key: %v", err)
+	}
+	ctx := MusicContext{
+		BPM:              122,
+		Key:              parsedKey,
+		Bars:             16,
+		VariationSeed:    "part-seed",
+		ChordProgression: theory.SelectProgression(parsedKey.Root, parsedKey.Scale, "part-seed"),
+		Groove:           "straight",
+	}
+
+	result, err := mg.GeneratePartWithContext(context.Background(), ctx, "arpeggio", 1)
+	if err != nil {
+		t.Fatalf("GeneratePartWithContext error: %v", err)
+	}
+	if len(result.Files) != 1 {
+		t.Fatalf("expected one output file, got %d", len(result.Files))
+	}
+	if filepath.Ext(result.Files[0]) != ".mid" {
+		t.Fatalf("expected midi file, got %q", result.Files[0])
+	}
+	if _, err := mg.GeneratePartWithContext(context.Background(), ctx, "nope", 1); err == nil {
+		t.Fatal("expected unknown pattern type error")
 	}
 }
 

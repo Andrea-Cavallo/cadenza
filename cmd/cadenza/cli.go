@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Andrea-Cavallo/cadenza/internal/models"
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
@@ -48,6 +49,7 @@ type cliConfig struct {
 	DumpSpec     string // directory to dump PatternSpec YAML
 	FromSpec     string // path to PatternSpec file to re-render
 	DryRun       bool   // REFACTOR.md point 19: execute without writing files
+	JSONOutput   bool   // machine-readable stdout summary
 	OfflineStyle string // hypnotic | driving | minimal | melodic
 	Interactive  bool   // true when launched from the interactive TUI
 }
@@ -176,13 +178,14 @@ var genrePresets = []genrePreset{
 // applyGenrePreset fills cfg from a preset by name. Returns false if the name is unknown.
 func applyGenrePreset(cfg *cliConfig, name string) bool {
 	for _, p := range genrePresets {
-		if p.name == name {
-			cfg.Key = p.key
-			cfg.BPM = p.bpm
-			cfg.Groove = p.groove
-			cfg.OfflineStyle = p.offlineStyle
-			return true
+		if p.name != name {
+			continue
 		}
+		cfg.Key = p.key
+		cfg.BPM = p.bpm
+		cfg.Groove = p.groove
+		cfg.OfflineStyle = p.offlineStyle
+		return true
 	}
 	return false
 }
@@ -391,16 +394,12 @@ func selectLLMEngine(cfg *cliConfig) bool {
 		switch choice {
 		case "1", "":
 			cfg.ProviderName = "claude"
-			cfg.Model = "claude-opus-4-7"
 		case "2":
 			cfg.ProviderName = "ollama"
-			cfg.Model = "qwen2.5:7b"
 		case "3":
 			cfg.ProviderName = "openai"
-			cfg.Model = "gpt-4o"
 		case "4":
 			cfg.ProviderName = "gemini"
-			cfg.Model = "gemini-2.0-flash-exp"
 		default:
 			fmt.Printf("  %s-> Enter 1, 2, 3, or 4%s\n", ansiRed, ansiReset)
 			continue
@@ -408,6 +407,8 @@ func selectLLMEngine(cfg *cliConfig) bool {
 		break
 	}
 	fmt.Println()
+
+	cfg.Model = selectModel(cfg.ProviderName)
 
 	if needsHostedAPIKey(cfg.ProviderName) {
 		apiKey := providerAPIKey(cfg.ProviderName)
@@ -438,6 +439,41 @@ func selectLLMEngine(cfg *cliConfig) bool {
 		fmt.Println()
 	}
 	return true
+}
+
+// selectModel shows the numbered model list for the given provider and returns the chosen model ID.
+// If the catalog has no models for the provider, falls back to resolveDefaultModel via empty string.
+func selectModel(provider string) string {
+	list := models.List(provider)
+	if len(list) == 0 {
+		return models.DefaultModel(provider)
+	}
+
+	fmt.Printf("  %sMODEL  (%s)%s\n\n", ansiDim+ansiWhite, provider, ansiReset)
+	for i, m := range list {
+		marker := "  "
+		if m.ID == models.DefaultModel(provider) {
+			marker = ansiGreen + "* " + ansiReset
+		}
+		fmt.Printf("  %s%s[%d]%s  %s\n", marker, ansiYellow+ansiBold, i+1, ansiReset, m.Name)
+	}
+	fmt.Printf("\n  %s(press Enter for default: %s)%s\n\n", ansiDim, models.DefaultModel(provider), ansiReset)
+
+	for {
+		raw := ask("Model")
+		if raw == "" {
+			return models.DefaultModel(provider)
+		}
+		idx := 0
+		if _, err := fmt.Sscanf(raw, "%d", &idx); err == nil && idx >= 1 && idx <= len(list) {
+			chosen := list[idx-1].ID
+			fmt.Printf("\n  %s-> %s%s\n\n", ansiGreen, chosen, ansiReset)
+			return chosen
+		}
+		// Accept any non-empty string as a custom model ID (not limited to catalog)
+		fmt.Printf("\n  %s-> %s%s\n\n", ansiGreen, raw, ansiReset)
+		return raw
+	}
 }
 
 func printProviderAvailability() {
@@ -634,7 +670,7 @@ func confirmInteractiveRender(cfg cliConfig) (cliConfig, bool) {
 	}
 }
 
-// handleProviderFailure shows a recovery menu when a provider fails to initialise.
+// handleProviderFailure shows a recovery menu when a provider fails to initialize.
 // Returns true if the user chose to continue (cfg may be modified), false to cancel.
 func handleProviderFailure(cfg *cliConfig, originalErr error) bool {
 	fmt.Printf("\n  %s✗  Provider error: %v%s\n\n", ansiRed+ansiBold, originalErr, ansiReset)
@@ -657,7 +693,7 @@ func handleProviderFailure(cfg *cliConfig, originalErr error) bool {
 			fmt.Println()
 			return selectLLMEngine(cfg)
 		case "4", "q", "":
-			fmt.Printf("\n  %sGeneration cancelled.%s\n\n", ansiDim, ansiReset)
+			fmt.Printf("\n  %sGeneration canceled.%s\n\n", ansiDim, ansiReset)
 			return false
 		default:
 			fmt.Printf("  %s-> Enter 1–4%s\n", ansiRed, ansiReset)

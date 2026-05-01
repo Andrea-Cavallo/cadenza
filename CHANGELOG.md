@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Prompt files are now embedded into the binary via `//go:embed` (`internal/prompts/`); the app no longer falls back to offline mode when the binary is run from a directory other than the project root.
+- Ollama/small-model validation failures: system prompt, correction examples, and all three prompt templates now explicitly list the valid evolution `action` catalog and enforce `intensity` as a float in `[0.0, 1.0]`, preventing the "unknown action" and "intensity out of range" retry loops.
+- Dynamic model catalog (`internal/models/models.yaml`) embedded in binary; add new models by editing YAML without recompiling. Local override at `~/.cadenza/models.yaml` or `./models.yaml` takes precedence. Interactive CLI now shows a numbered model menu after engine selection. 12 Ollama models pre-configured (Qwen 2.5 7B/14B/32B, Llama 3.x, Mistral, Mixtral, Gemma2, Phi-4, DeepSeek-R1, Qwen Coder).
+- Range correction examples are now pattern-type-specific (bassline/arpeggio/melody octave guidance), reducing wrong-octave retries.
+- Critic revision prompt now includes explicit density constraints per pattern type (bassline 8-13, arpeggio 12-16, melody 4-10), preventing revision from stripping notes below minimum density.
+
 ### Added
+- **LLM MusicalPlan foundation**: `internal/generator/planner.go` adds a production-intent plan before PatternSpec generation, including mood, energy, tension curve, rhythmic identity, motif concept, density target, call/response, section intentions, track separation, and revision priorities.
+- **Producer style cards**: LLM prompts now receive compact style-card direction (`afterlife-dark`, `prydz-progressive`, `minimal-hypnotic`, `festival-melodic`, `warehouse-driving`) derived from mode, BPM, and `MusicContext.OfflineStyle`.
+- **`{{MUSICAL_PLAN}}` prompt injection**: bassline, arpeggio, and melody prompts now include the generated musical plan before note selection, making AI mode more intentional and less one-shot/mechanical.
+- **Musical scoring report**: `Validator.ScoreMusicality()` adds soft quality metrics for repeated 4-step phrases, downbeat chord-tone ratio, pitch contour diversity, articulation flatness, section densities, and warnings.
+- **Planner-aware cache keys**: LLM PatternSpec cache keys now include planner version, style-card version, and style-card name to avoid reusing stale responses after musical-intent changes.
+- **Critic + targeted revision loop**: valid LLM PatternSpecs now receive a critic pass and, when needed, one targeted revision round that fixes only weak musical dimensions while preserving schema, seed, key, scale, and chord alignment.
+- **Anti-loop validation**: validator now rejects 4-step phrases repeated more than twice without rhythmic, pitch, or articulation variation.
+- **Cross-track arrangement scoring**: `schema.ScoreArrangement()` reports shared density peaks and melody/arpeggio pitch/register collisions across the generated trio.
+- **Listening fixtures**: added `testdata/listening/llm_quality_cases.json` for A/B evaluation of one-step LLM generation vs planner+critic generation.
+- **Post-run key and part iteration**: added "same motifs, new key", single-part regeneration for bassline/arpeggio/melody, and lock-progression mode to the interactive post-run menu.
+- **`--json` output mode**: prints machine-readable generation summaries for scripts and DAW integrations.
+- **`cadenza config init`**: scaffolds an annotated starter `cadenza.yaml`; supports `--force` to overwrite.
+- **Representative example MIDI sets**: generated local examples for Am 122 BPM, Dm-dorian 128 BPM, and G-mixolydian 124 BPM under `output/examples/`.
 - **Provider failure choice screen** (`handleProviderFailure`): when provider init fails in interactive mode, shows a menu — retry / switch to offline / switch to a different provider / cancel — instead of hard-exiting. Controlled by `cliConfig.Interactive` so flag mode and CI are unaffected.
 - **`--doctor` flag**: runs `runDoctorCheck`, which prints a diagnostic report: Go runtime version, API key presence (Claude, OpenAI, Gemini), Ollama reachability, and output directory writability.
 - **`--non-interactive` flag**: explicitly forces flag mode (skips TUI); useful in CI and headless scripts. Requires `--bpm` and `--key` (or `--from-spec`) to be present.

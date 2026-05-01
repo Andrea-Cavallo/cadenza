@@ -133,11 +133,68 @@ Incorrect step: {"active": true, "note": "A#3"}
 `
 	}
 
-	// Range violation example
+	// Range violation example — pattern-type-specific octave guidance
 	if strings.Contains(errMsg, "out of") && strings.Contains(errMsg, "range") {
-		return `<correction_example>
+		switch {
+		case strings.Contains(errMsg, "bassline range"):
+			return `<correction_example>
+Bassline range is MIDI 33-55 (A1 to G3). Use octave 2 as the center (A2=MIDI45, E2=MIDI40, D2=MIDI38).
+NEVER use octave 3 or higher for bassline notes.
+Wrong: {"active": true, "note": "A3"}  (MIDI 57 — too high)
+Right: {"active": true, "note": "A2"}  (MIDI 45 — correct)
+</correction_example>
+`
+		case strings.Contains(errMsg, "arpeggio range"):
+			return `<correction_example>
+Arpeggio range is MIDI 48-84 (C3 to C6). Use octaves 3-5 (e.g. A3=MIDI57, E4=MIDI64, A5=MIDI81).
+NEVER exceed C6 (MIDI 84).
+Wrong: {"active": true, "note": "F6"}  (MIDI 89 — too high)
+Right: {"active": true, "note": "F5"}  (MIDI 77 — correct)
+</correction_example>
+`
+		case strings.Contains(errMsg, "melody range"):
+			return `<correction_example>
+Melody range is MIDI 60-96 (C4 to C7). Use octaves 4-6 (e.g. A4=MIDI69, E5=MIDI76).
+NEVER go below C4 (MIDI 60).
+Wrong: {"active": true, "note": "A3"}  (MIDI 57 — too low)
+Right: {"active": true, "note": "A4"}  (MIDI 69 — correct)
+</correction_example>
+`
+		default:
+			return `<correction_example>
 Ensure all MIDI notes are within the allowed range for this pattern type.
-Correct step: {"active": true, "note": "A2"}
+Bassline: octave 1-3 (center A2). Arpeggio: octave 3-5 (center E4). Melody: octave 4-6 (center A4).
+</correction_example>
+`
+		}
+	}
+
+	// Unknown evolution action
+	if strings.Contains(errMsg, "unknown action") {
+		return `<correction_example>
+The "action" field in each evolution step must be EXACTLY one of these strings:
+  introduce, build, peak, release, octave_up, octave_down,
+  density_up, density_down, add_chord_note, strip_to_root, ornament
+
+The "intensity" must be a float between 0.0 and 1.0.
+
+Correct evolution array:
+[
+  {"from_bar": 1, "to_bar": 4,  "action": "introduce", "intensity": 0.3},
+  {"from_bar": 5, "to_bar": 8,  "action": "build",     "intensity": 0.6},
+  {"from_bar": 9, "to_bar": 12, "action": "peak",       "intensity": 0.9},
+  {"from_bar": 13,"to_bar": 16, "action": "release",    "intensity": 0.5}
+]
+</correction_example>
+`
+	}
+
+	// Intensity out of range
+	if strings.Contains(errMsg, "intensity") && strings.Contains(errMsg, "out of [0, 1]") {
+		return `<correction_example>
+"intensity" must be a decimal float between 0.0 and 1.0 (inclusive).
+Wrong: {"action": "build", "intensity": 8}
+Right: {"action": "build", "intensity": 0.8}
 </correction_example>
 `
 	}

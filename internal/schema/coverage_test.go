@@ -3,6 +3,7 @@ package schema
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
@@ -163,4 +164,104 @@ func TestValidator_HelperBranches(t *testing.T) {
 	if meetsChordThreshold(2, 4, 0.75) {
 		t.Fatal("expected threshold to fail")
 	}
+}
+
+func TestScoreMusicality(t *testing.T) {
+	steps := []StepSpec{
+		{Active: true, Note: "A2", Accent: true},
+		{Active: false},
+		{Active: true, Note: "C3"},
+		{Active: false},
+		{Active: true, Note: "F2", Accent: true},
+		{Active: false},
+		{Active: true, Note: "A2"},
+		{Active: false},
+		{Active: true, Note: "C3", Accent: true},
+		{Active: false},
+		{Active: true, Note: "G2"},
+		{Active: false},
+		{Active: true, Note: "G2", Accent: true},
+		{Active: false},
+		{Active: true, Note: "B2"},
+		{Active: false},
+	}
+	spec := PatternSpec{PatternType: "bassline", Motif: MotifSpec{Length: 16, Steps: steps}}
+	prog := theory.ChordProgression{Chords: []theory.ProgressionChord{
+		{Root: "A", Quality: "minor"},
+		{Root: "F", Quality: "major"},
+		{Root: "C", Quality: "major"},
+		{Root: "G", Quality: "major"},
+	}}
+
+	report := NewValidator().ScoreMusicality(&spec, prog)
+	if report.DownbeatChordToneRatio != 1 {
+		t.Fatalf("expected all downbeats to be chord tones, got %.2f", report.DownbeatChordToneRatio)
+	}
+	if len(report.SectionDensities) != 4 {
+		t.Fatalf("expected 4 section densities, got %v", report.SectionDensities)
+	}
+	if report.PitchContourDiversity == 0 {
+		t.Fatal("expected contour diversity to be measured")
+	}
+
+	repeated := PatternSpec{PatternType: "arpeggio", Motif: MotifSpec{Length: 16, Steps: repeatedPlainSteps()}}
+	report = NewValidator().ScoreMusicality(&repeated, prog)
+	if report.RepeatedPhraseCount == 0 {
+		t.Fatal("expected repeated phrase warning")
+	}
+	if !strings.Contains(strings.Join(report.Warnings, " "), "repeats") {
+		t.Fatalf("expected repeated warning, got %v", report.Warnings)
+	}
+}
+
+func TestValidateAntiLoopAndArrangementScore(t *testing.T) {
+	spec := validBasslineSpec()
+	spec.Motif.Steps = repeatedPlainSteps()
+	if err := NewValidator().Validate(spec); err == nil || !strings.Contains(err.Error(), "anti-loop") {
+		t.Fatalf("expected anti-loop validation failure, got %v", err)
+	}
+
+	arp := validBasslineSpec()
+	arp.PatternType = "arpeggio"
+	arp.StyleProfile = "arp_flowing"
+	arp.Motif.Steps = repeatedNoteSteps("A4", 16)
+	melody := validBasslineSpec()
+	melody.PatternType = "melody"
+	melody.StyleProfile = "melody_expressive"
+	melody.Motif.Steps = repeatedNoteSteps("A4", 16)
+	bass := validBasslineSpec()
+	bass.Motif.Steps = repeatedNoteSteps("A2", 16)
+
+	report := ScoreArrangement(map[string]*PatternSpec{
+		"bassline": bass,
+		"arpeggio": arp,
+		"melody":   melody,
+	})
+	if !report.AllTracksPeakSameSection {
+		t.Fatalf("expected aligned peak sections, got %+v", report)
+	}
+	if report.MelodyArpRegisterCollision == 0 {
+		t.Fatalf("expected melody/arp register collisions, got %+v", report)
+	}
+	if len(report.Warnings) == 0 {
+		t.Fatalf("expected arrangement warnings, got %+v", report)
+	}
+}
+
+func repeatedPlainSteps() []StepSpec {
+	steps := make([]StepSpec, 16)
+	for i := range steps {
+		if i%2 == 0 {
+			steps[i] = StepSpec{Active: true, Note: "A3"}
+		}
+	}
+	return steps
+}
+
+func repeatedNoteSteps(note string, length int) []StepSpec {
+	steps := make([]StepSpec, length)
+	for i := range steps {
+		steps[i] = StepSpec{Active: true, Note: note}
+	}
+	return steps
 }

@@ -106,7 +106,8 @@ Offline mode:
 - Genre presets: `--preset progressive-warmup|peak-time-driver|afterhours-hypnotic|festival-melodic`
 - Offline style sub-modes: `--offline-style hypnotic|driving|minimal|melodic`
 - Energy selector (1–5) in interactive mode
-- Post-run iteration: same harmony, A/B compare, faster/slower/busier/sparser
+- Post-run iteration: same harmony, same motifs in a new key, regenerate one part, lock progression, A/B compare, faster/slower/busier/sparser
+- Script integration: `--json`, `--non-interactive`, and `cadenza config init`
 - Reproduce command printed after every run
 - Deterministic renderer with timing, velocity, gate, sweep, and portamento rules
 - Claude, Ollama, OpenAI, and Gemini support
@@ -179,6 +180,25 @@ go build -o bin/cadenza ./cmd/cadenza/
 Output goes to `./output/` by default.
 
 ### Run with hosted LLMs
+
+### Power User CLI
+
+```bash
+cadenza config init
+cadenza --bpm 122 --key Am --no-llm --json --non-interactive
+```
+
+`--json` prints one machine-readable generation summary per variation. `cadenza config init` creates an annotated starter `cadenza.yaml` in the current directory.
+
+### Representative MIDI Examples
+
+Local example MIDI sets are generated under `output/examples/`:
+
+```bash
+cadenza --bpm 122 --key Am --no-llm --output output/examples/am_122
+cadenza --bpm 128 --key Dm-dorian --no-llm --output output/examples/dm_dorian_128
+cadenza --bpm 124 --key G-mixolydian --no-llm --output output/examples/g_mixolydian_124
+```
 
 #### Claude
 
@@ -534,8 +554,10 @@ make ci
 User (BPM + Key)
   -> Key parser
   -> Shared chord progression
+  -> Musical plan (style card, tension curve, motif intent)
   -> Parallel generators (bassline, arpeggio, melody)
-  -> Validator
+  -> Critic + one targeted revision round when needed
+  -> Validator + musical scoring
   -> Renderer
   -> 3 MIDI files
 ```

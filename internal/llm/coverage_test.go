@@ -149,8 +149,8 @@ func TestExtractCorrectionExample_Branches(t *testing.T) {
 	}
 
 	rng := extractCorrectionExample(assertErr("step[0] note C7 out of bassline range"))
-	if !strings.Contains(rng, "allowed range") {
-		t.Fatalf("expected range example, got %q", rng)
+	if !strings.Contains(rng, "MIDI 33-55") {
+		t.Fatalf("expected bassline range example, got %q", rng)
 	}
 
 	density := extractCorrectionExample(assertErr("density too low: 1 active steps"))
