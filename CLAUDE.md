@@ -28,21 +28,27 @@ User (BPM + Key)
 - **Validator** enforces: note range, scale membership, density, chord coherence, BPM bounds
 - **Offline mode** owns: seed-based algorithmic pattern generation (no API calls)
 
-## Key Directories
+## Repository Layout
 
 | Path | Purpose |
 |------|---------|
-| `cmd/cadenza/` | CLI entry point, interactive mode |
-| `internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
-| `internal/schema/` | PatternSpec types + musical validator (with chord coherence check) |
-| `internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
-| `internal/renderer/` | MIDI rendering: velocity, timing, gate, sweep, evolution, portamento |
-| `internal/renderer/styleprofile/` | Deterministic style profiles with DynamicCurve (crescendo/arch) |
-| `internal/generator/` | Chord progression gen + single/multi-pattern generation + offline templates + LLM cache integration |
-| `internal/midi/` | MIDI Type-0 file writer with priority-based event ordering |
-| `internal/cache/` | SHA256-keyed disk cache (30-day TTL) |
-| `internal/prompts/` | LLM prompt templates (bassline, arpeggio, melody) — embedded into binary via `//go:embed` |
-| `internal/models/` | Model catalog (`models.yaml`, embedded) — add/remove models without recompiling; override with `~/.cadenza/models.yaml` or `./models.yaml` |
+| `backend/` | All Go source, module root (`go.mod` here) |
+| `backend/cmd/cadenza/` | CLI entry point (dev mode only) |
+| `backend/cmd/api/` | HTTP API server (added in Phase 2) |
+| `backend/internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
+| `backend/internal/schema/` | PatternSpec types + musical validator (with chord coherence check) |
+| `backend/internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
+| `backend/internal/renderer/` | MIDI rendering: velocity, timing, gate, sweep, evolution, portamento |
+| `backend/internal/renderer/styleprofile/` | Deterministic style profiles with DynamicCurve (crescendo/arch) |
+| `backend/internal/generator/` | Chord progression gen + single/multi-pattern generation + offline templates + LLM cache integration |
+| `backend/internal/midi/` | MIDI Type-0 file writer with priority-based event ordering |
+| `backend/internal/cache/` | SHA256-keyed disk cache (30-day TTL) |
+| `backend/internal/prompts/` | LLM prompt templates (bassline, arpeggio, melody) — embedded into binary via `//go:embed` |
+| `backend/internal/models/` | Model catalog (`models.yaml`, embedded) — add/remove models without recompiling; override with `~/.cadenza/models.yaml` or `./models.yaml` |
+| `backend/Makefile` | Go build, test, lint targets |
+| `backend/Dockerfile` | Container image for API server |
+| `frontend/` | React/JSX UI (plain JSX + CDN, no build step) |
+| `docs/` | Specs, plans, architecture documents |
 
 ## Conventions
 
@@ -96,35 +102,41 @@ These are **invariants** the renderer enforces regardless of LLM output:
 ## Running
 
 ```bash
-# Build
+# Build (from backend/ or via root delegator)
+cd backend && make build
+# or from repo root:
 make build
 
 # Cross-compile all platforms
-make build-all
+cd backend && make build-all
 
 # With Claude
 export ANTHROPIC_API_KEY=sk-...
-go run ./cmd/cadenza/ --bpm 122 --key Am
+cd backend && go run ./cmd/cadenza/ --bpm 122 --key Am
 
 # With Ollama
-go run ./cmd/cadenza/ --bpm 122 --key Am --provider ollama --model qwen2.5:7b
+cd backend && go run ./cmd/cadenza/ --bpm 122 --key Am --provider ollama --model qwen2.5:7b
 
 # Offline (deterministic, no LLM)
-go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
+cd backend && go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
+
+# API server (Phase 2)
+cd backend && go run ./cmd/api/ --port 8080
 
 # Docker
-make docker && make docker-run
+cd backend && make docker && make docker-run
 ```
 
 ## Testing
 
 ```bash
-make test                                        # all unit tests
-make test-race                                   # with race detector
-make test-integration                            # include integration tests
-make test-coverage                               # coverage report
-go test ./internal/renderer/ -v -run TestRender  # renderer tests
-make listening-test                              # generate files for A/B test in DAW
+cd backend
+make test                                                    # all unit tests
+make test-race                                               # with race detector
+make test-integration                                        # include integration tests
+make test-coverage                                           # coverage report
+go test ./internal/renderer/ -v -run TestRender              # renderer tests
+make listening-test                                          # generate files for A/B test in DAW
 ```
 
 ## Quality Gate — Mandatory Before Any Completion
@@ -132,12 +144,15 @@ make listening-test                              # generate files for A/B test i
 The full local CI pipeline is `make ci`. It runs in order: `fmt → vet → lint → vuln → coverage`. All steps must pass clean.
 
 ```bash
+cd backend && make ci
+# or from repo root:
 make ci
 ```
 
-Individual tools:
+Individual tools (run from `backend/`):
 
 ```bash
+cd backend
 golangci-lint run ./...     # static analysis — zero errors required
 govulncheck ./...           # vulnerability scan — zero findings required
 go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic
@@ -166,7 +181,7 @@ Dashboard: `https://sonarcloud.io/project/overview?id=Andrea-Cavallo_cadenza`
 
 SonarCloud runs automatically on every push via `.github/workflows/ci.yml` (the `sonar` job). It requires `SONAR_TOKEN` in the repo's GitHub Secrets.
 
-Configuration lives in `sonar-project.properties`. Coverage is fed from `coverage.out` (generated by the `test` job and passed as an artifact).
+Configuration lives in `backend/sonar-project.properties`. Coverage is fed from `backend/coverage.out` (generated by the `test` job and passed as an artifact).
 
 **Quality gate thresholds** (enforced on SonarCloud, fail PR if not met):
 - Coverage: ≥ 80%
@@ -177,7 +192,7 @@ Configuration lives in `sonar-project.properties`. Coverage is fed from `coverag
 
 To run SonarCloud locally (requires `sonar-scanner` on PATH):
 ```bash
-SONAR_TOKEN=<your-token> make sonar
+cd backend && SONAR_TOKEN=<your-token> make sonar
 ```
 
 ## Guidelines
@@ -200,6 +215,8 @@ After **every** code change, autonomously perform **all** of these steps in orde
 
 ### Build and correctness
 
+All commands run from `backend/`:
+
 1. `go build ./...` — must pass with zero errors
 2. `go vet ./...` — must pass clean
 3. `GOOS=linux go build ./...` — cross-compilation must still pass
@@ -209,7 +226,7 @@ After **every** code change, autonomously perform **all** of these steps in orde
 ### Quality gate — non-negotiable
 
 6. `golangci-lint run ./...` — must pass with zero `Error:` lines
-   - If you see `package requires newer Go version`: check that `.golangci.yml` `run.go` matches `go.mod`
+   - If you see `package requires newer Go version`: check that `backend/.golangci.yml` `run.go` matches `backend/go.mod`
    - If you see `undefined: anthropic` or similar SDK symbols: same root cause — fix the Go version mismatch
 7. `govulncheck ./...` — must return zero vulnerability findings
 

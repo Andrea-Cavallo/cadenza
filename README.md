@@ -1,4 +1,4 @@
-# CADENZA
+﻿# CADENZA
 
 <p align="center">
   <img src="cadenza.png" alt="Cadenza" width="480" />
@@ -143,6 +143,7 @@ cadenza --bpm 122 --key Am --no-llm
 If you just cloned the repo and want to try it right away:
 
 ```bash
+cd backend
 go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 ```
 
@@ -154,7 +155,7 @@ In interactive mode, choose a genre preset or configure manually. The energy sel
 
 ```powershell
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza.exe ./cmd/cadenza/
 .\bin\cadenza.exe --bpm 122 --key Am --no-llm
 ```
@@ -163,7 +164,7 @@ go build -o bin/cadenza.exe ./cmd/cadenza/
 
 ```bash
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza ./cmd/cadenza/
 ./bin/cadenza --bpm 122 --key Am --no-llm
 ```
@@ -172,7 +173,7 @@ go build -o bin/cadenza ./cmd/cadenza/
 
 ```bash
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza ./cmd/cadenza/
 ./bin/cadenza --bpm 122 --key Am --no-llm
 ```
@@ -353,6 +354,7 @@ Dopo il clone servono:
 ### Provarlo subito senza build
 
 ```bash
+cd backend
 go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 ```
 
@@ -362,7 +364,7 @@ go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 
 ```powershell
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza.exe ./cmd/cadenza/
 .\bin\cadenza.exe --bpm 122 --key Am --no-llm
 ```
@@ -371,7 +373,7 @@ go build -o bin/cadenza.exe ./cmd/cadenza/
 
 ```bash
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza ./cmd/cadenza/
 ./bin/cadenza --bpm 122 --key Am --no-llm
 ```
@@ -380,7 +382,7 @@ go build -o bin/cadenza ./cmd/cadenza/
 
 ```bash
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza ./cmd/cadenza/
 ./bin/cadenza --bpm 122 --key Am --no-llm
 ```
@@ -470,6 +472,7 @@ Despues de clonar el repo necesitas:
 ### Probarlo sin compilar
 
 ```bash
+cd backend
 go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 ```
 
@@ -479,7 +482,7 @@ go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 
 ```powershell
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza.exe ./cmd/cadenza/
 .\bin\cadenza.exe --bpm 122 --key Am --no-llm
 ```
@@ -488,7 +491,7 @@ go build -o bin/cadenza.exe ./cmd/cadenza/
 
 ```bash
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza ./cmd/cadenza/
 ./bin/cadenza --bpm 122 --key Am --no-llm
 ```
@@ -497,7 +500,7 @@ go build -o bin/cadenza ./cmd/cadenza/
 
 ```bash
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 go build -o bin/cadenza ./cmd/cadenza/
 ./bin/cadenza --bpm 122 --key Am --no-llm
 ```
