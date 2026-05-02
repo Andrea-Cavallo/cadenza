@@ -1,0 +1,55 @@
+# Cadenza Configuration
+# Override via environment variables: CADENZA_<SECTION>_<KEY>
+# Example: CADENZA_AUDIO_BPM=130, CADENZA_LLM_PROVIDER=ollama
+
+# ─── Application ──────────────────────────────────────────────────────
+app:
+  name: cadenza
+  env: development     # development | production (affects log format)
+
+# ─── Audio Defaults ──────────────────────────────────────────────────
+audio:
+  bpm: 122             # 80-150, default tempo
+  key: Am              # default musical key
+  bars: 16             # 16, 32, 64, 128
+  variations: 1        # 1-100, number of output variations
+  groove: straight     # straight | mpc60 | linndrum | humanize
+  ticks_per_beat: 480  # MIDI resolution
+  max_velocity: 120    # never 127 (clips)
+
+# ─── LLM Provider ───────────────────────────────────────────────────
+llm:
+  provider: claude     # claude | ollama | openai | gemini
+  model: claude-opus-4-7
+  temperature: 0.3
+  max_tokens: 4096
+  max_retries: 3
+  timeout_seconds: 30
+  ollama_url: http://localhost:11434
+
+# ─── Renderer ────────────────────────────────────────────────────────
+renderer:
+  bass_range: [33, 55]     # MIDI note range
+  arp_range: [48, 84]
+  melody_range: [60, 96]
+  ghost_velocity_min: 35
+  ghost_velocity_max: 55
+  portamento_cc: 5         # CC5 portamento time
+
+# ─── Output ──────────────────────────────────────────────────────────
+output:
+  dir: output
+  file_prefix: output
+  midi_type: 0             # 0 = separate files, 1 = single Type-1
+
+# ─── Logging ─────────────────────────────────────────────────────────
+logging:
+  level: info              # debug | info | warn | error
+  format: text             # text (dev) | json (production)
+  file: cadenza.log        # written to output.dir/logs/ unless absolute or already a path
+
+# ─── Cache ───────────────────────────────────────────────────────────
+cache:
+  enabled: true
+  ttl_days: 30
+  dir: .cache

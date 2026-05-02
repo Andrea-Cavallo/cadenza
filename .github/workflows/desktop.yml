@@ -1,0 +1,78 @@
+name: Desktop Packages
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: Desktop ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            platform: windows/amd64
+            script: powershell
+            artifact: cadenza-desktop-windows
+            zip: dist/*windows-amd64.zip
+          - name: macOS
+            os: macos-latest
+            platform: darwin/universal
+            script: bash
+            artifact: cadenza-desktop-macos
+            zip: dist/*macos-universal.zip
+          - name: Linux
+            os: ubuntu-22.04
+            platform: linux/amd64
+            script: bash
+            artifact: cadenza-desktop-linux
+            zip: dist/*linux-amd64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/cmd/desktop/frontend/package-lock.json
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Build desktop distribution (Windows)
+        if: matrix.script == 'powershell'
+        shell: pwsh
+        run: ./scripts/build-distributions.ps1 -Version "${{ github.sha }}" -DesktopPlatforms "${{ matrix.platform }}" -SkipChecks
+
+      - name: Build desktop distribution (Unix)
+        if: matrix.script == 'bash'
+        shell: bash
+        run: bash scripts/build-distributions.sh --version "${{ github.sha }}" --desktop-platforms "${{ matrix.platform }}" --skip-checks
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.zip }}
+          if-no-files-found: error

@@ -1,12 +1,17 @@
 # AGENTS.md — LLMIDI-Gen
 
 AI-powered MIDI generator: Go 1.25, LLM-driven, progressive house / melodic techno.
+**IMPORTANT:** Always read TODO.md first for the most current project status and work priorities.
+This file provides architectural overview; TODO.md contains actionable tasks.
+
+**Core Focus:** The primary goal is musical quality — generating hypnotic, varied, and musically interesting patterns, especially in offline mode (`--no-llm`). All architectural decisions serve this goal.
 
 ## Project Overview
+Takes **BPM + Key** as input, produces **3 MIDI files** (bassline, arpeggio, melody). 
+A shared chord progression ensures harmonic coherence. The LLM creates musical motifs; 
+the renderer applies professional timing, velocity, and automation deterministically via style profiles. 
+Offline mode (`--no-llm`) generates hypnotic, varied patterns algorithmically.
 
-Takes **BPM + Key** as input, produces **3 MIDI files** (bassline, arpeggio, melody). A shared chord progression ensures harmonic coherence. The LLM creates musical motifs; the renderer applies professional timing, velocity, and automation deterministically via style profiles. Offline mode (`--no-llm`) generates hypnotic, varied patterns algorithmically.
-
-**Specs:** `"C:\Users\Andrea\Desktop\midillmnew-master\midillm_go-master\docs\superpowers\specs\2026-04-29-midi-examples-design.md"` is the source of truth for architecture, PatternSpec schema, style profiles, and musical rules.
 
 ## Architecture
 
@@ -14,29 +19,56 @@ Takes **BPM + Key** as input, produces **3 MIDI files** (bassline, arpeggio, mel
 User (BPM + Key)
   → KeyParser
   → Step 0: Chord Progression (4 chords, shared)
-  → Step 1: 3x parallel generators (bass, arp, melody) — all receive same chord progression
-  → Validator (scale + range + density + chord coherence)
+  → Step 1a: MusicalPlan (style card + tension curve + motif intent)
+  → Step 1: 3x parallel generators (bass, arp, melody) — all receive same chord progression + plan
+  → Critic + one targeted revision round when musical scoring is weak
+  → Validator (scale + range + density + chord coherence + soft musical scoring)
   → StyleProfile → Renderer
   → 3 MIDI Type-0 files
 ```
 
 - **Step 0 (Chord Progression)** owns: harmonic contract — 4 chords, one per 4 bars
-- **LLM** owns: motif creativity, note choice, evolution arc (within chord constraints)
+- **MusicalPlan** owns: producer intent — style card, tension curve, motif concept, density target, and section intent
+- **LLM** owns: motif creativity, note choice, evolution arc (within chord and plan constraints)
+- **Critic** owns: soft quality judgment — repetition, motif clarity, chord-tone strength, contour, density, tension arc, track separation; at most one targeted revision
 - **Renderer** owns: timing offsets, velocity grids, gate lengths, CC automation, portamento
-- **Validator** enforces: note range, scale membership, density, chord coherence, BPM bounds
+- **Validator** enforces: note range, scale membership, density, chord coherence, BPM bounds; it also reports soft musical scores
 - **Offline mode** owns: seed-based algorithmic pattern generation (no API calls)
+
+## Implementation Order
+
+```
+P0-binary
+  → P0-0a (seed entropy)
+  → P0-0b (key differentiation)
+  → P0-0c (modal support)
+  → P0-0d (LLM prompt quality)
+  → P0-0e (offline hypnotic patterns)
+  → P0-0f (LLM planner + critic quality)
+    → P1 (README + demo — only after music sounds good)
+      → P2-Phase1
+      → P2-Phase2
+      → P2-Phase3 + Phase4
+        → P3 (coverage gaps from modal work)
+```
+
+> **Rule:** Do not start P1 (README / demo audio) until P0 music quality is solved.
+> A bad demo hurts more than no demo.
 
 ## Key Directories
 
 | Path | Purpose |
 |------|---------|
 | `cmd/cadenza/` | CLI entry point, interactive mode |
+| `cmd/desktop/` | Wails desktop app entry point and AppService bindings |
+| `cmd/desktop/frontend/` | Vite + React + TypeScript desktop UI embedded into the Wails binary |
+| `scripts/` | Local automation scripts for packaging and release builds |
 | `internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
-| `internal/schema/` | PatternSpec types + musical validator (with chord coherence check) |
-| `internal/llm/` | Provider interface, Codex (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
+| `internal/schema/` | PatternSpec types + musical validator (with chord coherence check and soft musical scoring) |
+| `internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |
 | `internal/renderer/` | MIDI rendering: velocity, timing, gate, sweep, evolution, portamento |
 | `internal/renderer/styleprofile/` | Deterministic style profiles with DynamicCurve (crescendo/arch) |
-| `internal/generator/` | Chord progression gen + single/multi-pattern generation + offline templates + LLM cache integration |
+| `internal/generator/` | Chord progression gen + MusicalPlan/style cards + single/multi-pattern generation + offline templates + LLM cache integration |
 | `internal/midi/` | MIDI Type-0 file writer with priority-based event ordering |
 | `internal/cache/` | SHA256-keyed disk cache (30-day TTL) |
 | `prompts/` | LLM prompt templates (bassline, arpeggio, melody) |
@@ -81,12 +113,14 @@ These are **invariants** the renderer enforces regardless of LLM output:
 
 ## LLM Integration
 
-- **Codex:** `tool_use` with `generate_pattern` tool forces structurally valid JSON — retry only for musical violations
+- **Claude:** `tool_use` with `generate_pattern` tool forces structurally valid JSON — retry only for musical violations
 - **Ollama:** JSON schema format object (full schema in `format` field) — retry handles both structural and musical errors
 - **System prompt:** Persistent rules and constraints sent via `System` field; user message contains only the specific generation task
 - **Retry:** max 3 attempts; classifies errors as structural (JSON parse) vs musical (validation); different correction prompts for each
 - **Temperature:** 0.3 for consistency
-- **Cache:** SHA256(provider+type+key+mode+seed), 30-day TTL on disk — skip API call if cached
+- **MusicalPlan:** generated before PatternSpec prompts; injects style card, tension curve, motif concept, section intent, and revision priorities
+- **Critic/revision:** one critic pass may request one targeted revision; never loop endlessly
+- **Cache:** SHA256(provider+type+key+mode+seed+prompt hash+planner version+style-card version+style-card name+critic version+revision policy), 30-day TTL on disk — skip API call if cached
 - **Graceful fallback:** if LLM fails after 3 retries, falls back to offline template (never fails completely)
 - **Chord coherence:** validator checks that each 4-step section contains at least one chord tone
 
@@ -99,7 +133,13 @@ make build
 # Cross-compile all platforms
 make build-all
 
-# With Codex
+# Desktop app
+make desktop         # Wails Windows build
+make desktop-dev     # Wails dev mode with HMR
+make desktop-manual  # npm install + npm run build + Go production build
+# If wails is installed outside PATH, pass WAILS=/path/to/wails.
+
+# With Claude
 export ANTHROPIC_API_KEY=sk-...
 go run ./cmd/cadenza/ --bpm 122 --key Am
 
@@ -179,7 +219,7 @@ SONAR_TOKEN=<your-token> make sonar
 
 ## Guidelines
 
-1. **Read SPECS.md first** when touching musical logic — it defines the exact behavior
+1. **Read TODO.md first** when touching musical logic — it defines the exact behavior
 2. **Style profiles are deterministic** — don't add randomness to velocity/timing/gate
 3. **Chord progression is the harmonic contract** — all 3 generators must respect it
 4. **Validator errors become correction prompts** — keep error messages human-readable
