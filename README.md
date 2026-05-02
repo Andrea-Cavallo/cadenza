@@ -38,6 +38,13 @@ cadenza --bpm 122 --key Am --no-llm
 
 ---
 
+<p align="center">
+  <img src="cadenza1.png" alt="Cadenza" width="480" />
+</p>
+
+<p align="center">
+
+
 ## Languages
 
 - [English](#english)
