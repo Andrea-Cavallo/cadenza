@@ -14,8 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `make desktop`, `make desktop-dev`, and `make desktop-manual`; the manual target follows Wails' documented npm-build-plus-Go-production-build flow.
 - Desktop output defaults to `~/cadenza-output/`, with a cross-platform Open Folder command.
 - Desktop frontend toolchain uses Vite 8 with a clean `npm audit` result.
+- Desktop provider setup panel now shows Claude/OpenAI/Gemini API-key readiness, Ollama install/runtime/model status, local model selection, Refresh, Start Ollama, and provider setup links.
+- PowerShell distribution builder (`scripts/build-distributions.ps1`) packages Windows, macOS, and Linux ZIPs with cross-compiled CLI binaries and Wails desktop binaries when the target build is available locally.
+- Desktop frontend redesign first pass: fixed black/cyan app shell with title bar, preset sidebar, generation controls, collapsible log drawer, output panel, and status bar.
+- Desktop app logger now writes to `~/cadenza-output/logs/cadenza-desktop.log` by default and mirrors backend `slog` lines into the UI log drawer in realtime.
+- Desktop MIDI preview now replaces the animated demo roll with a real post-generation PatternSpec viewer, including Bass/Arp/Melody tabs, chord progression pills, active notes, and Keep/Discard/Export all actions.
+- Desktop log drawer now shows step-by-step generation progress (`provider`, `plan`, `generate`, `render`, `write`) and operational error messages with the next button or setup action to use.
+- Desktop packaging now includes cross-platform distribution scripts, a multi-OS GitHub Actions matrix, Windows ZIP content validation, and the Cadenza icon for Wails desktop binaries.
+- Desktop sidebar now uses a minimal producer workflow: key, BPM, bars, provider, and Generate only; frontend genre presets and the Advanced drawer were removed.
 
 ### Fixed
+- Desktop generation now preflights selected providers before rendering, so missing API keys or unavailable Ollama produce clear UI errors instead of silently falling back to offline output.
+- Desktop provider status no longer truncates important Ollama/setup messages and now separates readiness summary, model count, and action buttons in one visible provider section.
 - `install-tools` now installs golangci-lint v2 and `.golangci.yml` declares Go `1.25.9`, keeping lint aligned with the module toolchain.
 - Prompt files are now embedded into the binary via `//go:embed` (`internal/prompts/`); the app no longer falls back to offline mode when the binary is run from a directory other than the project root.
 - Ollama/small-model validation failures: system prompt, correction examples, and all three prompt templates now explicitly list the valid evolution `action` catalog and enforce `intensity` as a float in `[0.0, 1.0]`, preventing the "unknown action" and "intensity out of range" retry loops.
@@ -95,6 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `TODO.md` coverage plan quantifying the gap to 80% and prioritizing missing tests by package.
 
 ### Changed
+- Updated `README.md` to clearly mark the project as beta and document that CLI logs are written under `<output-dir>/logs/cadenza.log` by default.
+- Refreshed `CONTRIBUTING.md` with current `backend/`-based setup instructions and a stronger "Contributors wanted" section for new collaborators.
 - Reduced validator and dev-mode flag parsing complexity by extracting focused helper functions.
 - Run the Docker smoke test container with the runner UID/GID so mounted `output/` remains writable without restoring world-writable permissions.
 - Pinned `JetBrains/qodana-action` in the Qodana workflow to a full commit SHA to satisfy dependency pinning security checks.
@@ -103,6 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expanded the README with practical post-clone setup, build, and run instructions for Windows, macOS, and Linux users.
 - Improved the interactive CLI with a quick-start offline sketch path, clearer provider availability guidance, and output-directory writability checks before rendering.
 - Expanded the interactive CLI post-run flow with explicit next actions, including rerunning the same setup with a fresh seed.
+- Moved backend application logs into an explicit `logs/` subdirectory under the output folder so beta builds produce easier-to-find runtime logs.
 
 ### Removed
 - **Dead code cleanup** — Removed 480+ lines of unused code identified through static analysis

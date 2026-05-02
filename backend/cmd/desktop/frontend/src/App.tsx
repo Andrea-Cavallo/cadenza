@@ -1,37 +1,22 @@
-import { ReactNode, useEffect, useState } from 'react'
-import { GenerationConsole, Params } from './components/GenerationConsole'
+import { useEffect, useState } from 'react'
+import { LogDrawer } from './components/LogDrawer'
 import { PianoRoll } from './components/PianoRoll'
-import { Pipeline } from './components/Pipeline'
-import { GENRE_PRESETS, PresetGrid } from './components/Presets'
-import { Topbar } from './components/Topbar'
-import { TweakRadio, TweakSection, TweaksPanel, useTweaks } from './components/TweaksPanel'
+import { Sidebar } from './components/Sidebar'
+import { StatusBar } from './components/StatusBar'
+import { TitleBar } from './components/TitleBar'
+import { AccentName, GenerationPreview, Params, ProviderStatus } from './types'
 
-function Section({ id, eyebrow, title, sub, children }: {
-  id: string
-  eyebrow: string
-  title: string
-  sub: string
-  children: ReactNode
-}) {
-  return (
-    <section id={id}>
-      <div className="shell">
-        <div className="section-head">
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 14 }}>{eyebrow}</div>
-            <h2 dangerouslySetInnerHTML={{ __html: title }} />
-          </div>
-          <p>{sub}</p>
-        </div>
-        {children}
-      </div>
-    </section>
-  )
+// @ts-ignore
+import * as AppService from '../wailsjs/go/main/AppService'
+
+const ACCENT_MAP: Record<AccentName, string> = {
+  cyan: '#00E0FF',
+  lime: '#01FF95',
+  amber: '#FFB000',
 }
 
 export default function App() {
-  const [tweaks, setTweak] = useTweaks({ accent: 'lime' })
-  const [activePreset, setActivePreset] = useState('progressive-warmup')
+  const [accent, setAccent] = useState<AccentName>('cyan')
   const [params, setParams] = useState<Params>({
     bpm: 122,
     key: 'Am-dorian',
@@ -39,114 +24,127 @@ export default function App() {
     groove: 'mpc60',
     style: 'melodic',
     provider: 'offline',
+    model: '',
     drums: false,
   })
+  const [log, setLog] = useState<string[]>([])
+  const [files, setFiles] = useState<string[]>([])
+  const [filesAlt, setFilesAlt] = useState<string[]>([])
+  const [preview, setPreview] = useState<GenerationPreview | null>(null)
+  const [previewAlt, setPreviewAlt] = useState<GenerationPreview | null>(null)
+  const [abView, setAbView] = useState<'a' | 'b'>('a')
+  const [kept, setKept] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [status, setStatus] = useState<ProviderStatus | null>(null)
+  const [logOpen, setLogOpen] = useState(false)
+  const [lastSeed, setLastSeed] = useState('')
+  const [pinnedSeed, setPinnedSeed] = useState('')
 
   useEffect(() => {
-    const map: Record<string, string> = { lime: '#01FF95', cyan: '#00E0FF', amber: '#FFB000' }
-    document.documentElement.style.setProperty('--accent', map[String(tweaks.accent)] || map.lime)
-  }, [tweaks.accent])
+    document.documentElement.style.setProperty('--accent', ACCENT_MAP[accent])
+  }, [accent])
 
-  const onSelectPreset = (id: string) => {
-    setActivePreset(id)
-    const preset = GENRE_PRESETS.find(x => x.id === id)
-    if (preset) {
-      setParams(prev => ({
-        ...prev,
-        bpm: preset.bpm,
-        key: preset.key,
-        groove: preset.groove,
-        style: preset.style,
-      }))
+  useEffect(() => {
+    const last = log[log.length - 1] ?? ''
+    if (last.startsWith('Error:')) setLogOpen(true)
+  }, [log])
+
+  useEffect(() => {
+    if (filesAlt.length === 0) setAbView('a')
+  }, [filesAlt])
+
+  const displayFiles = abView === 'b' && filesAlt.length > 0 ? filesAlt : files
+  const displayPreview = abView === 'b' && previewAlt ? previewAlt : preview
+
+  const discardCurrent = () => {
+    if (abView === 'b') {
+      setFilesAlt([])
+      setPreviewAlt(null)
+      setAbView('a')
+      return
     }
+    setFiles([])
+    setPreview(null)
+    setKept(false)
   }
 
   return (
-    <>
-      <Topbar />
+    <div className="app-shell">
+      <TitleBar
+        accent={accent}
+        onAccentChange={setAccent}
+        provider={params.provider}
+        status={status}
+        running={running}
+        logOpen={logOpen}
+        onToggleLog={() => setLogOpen(o => !o)}
+      />
 
-      <section style={{ padding: '70px 0 40px' }}>
-        <div className="shell" style={{ marginBottom: 36 }}>
-          <div className="eyebrow" style={{ marginBottom: 22 }}>
-            MIDI generation engine . desktop app for modern electronic music
-          </div>
-          <h1 className="hero-title">
-            Coherent MIDI<br />for the floor - <em>generated.</em>
-          </h1>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 60, marginTop: 36, alignItems: 'end' }}>
-            <p style={{ fontSize: 17, lineHeight: 1.55, color: 'var(--fg-dim)', maxWidth: '60ch', margin: 0 }}>
-              Cadenza renders <span className="mono" style={{ color: 'var(--fg)' }}>bassline</span>,{' '}
-              <span className="mono" style={{ color: 'var(--fg)' }}>arpeggio</span> and{' '}
-              <span className="mono" style={{ color: 'var(--fg)' }}>melody</span> tracks
-              that share one progression and one seed.
-            </p>
-            <div className="kv">
-              <div className="k">tempo</div><div className="v">80 - 150 bpm</div>
-              <div className="k">scales</div><div className="v">major . minor . dorian . phrygian . mixolydian . lydian</div>
-              <div className="k">providers</div><div className="v">claude . ollama . openai . gemini . offline</div>
-            </div>
-          </div>
-        </div>
-        <div className="shell">
+      <main className="app-main">
+        <Sidebar
+          params={params}
+          setParams={setParams}
+          setLog={setLog}
+          setFiles={setFiles}
+          setFilesAlt={setFilesAlt}
+          setPreview={setPreview}
+          setPreviewAlt={setPreviewAlt}
+          files={files}
+          running={running}
+          setRunning={setRunning}
+          status={status}
+          setStatus={setStatus}
+          pinnedSeed={pinnedSeed}
+          setLastSeed={setLastSeed}
+        />
+
+        <section className="workspace">
           <div className="roll-wrap">
-            <PianoRoll bpm={params.bpm} />
+            <PianoRoll
+              bpm={params.bpm}
+              playing={running}
+              preview={displayPreview}
+              kept={kept}
+              onKeep={() => setKept(true)}
+              onDiscard={discardCurrent}
+              onExportAll={() => AppService.OpenOutputFolder()}
+            />
+
+            {!running && filesAlt.length > 0 && (
+              <div className="ab-toggle">
+                <button
+                  type="button"
+                  className={abView === 'a' ? 'on' : ''}
+                  onClick={() => setAbView('a')}
+                >A</button>
+                <button
+                  type="button"
+                  className={abView === 'b' ? 'on' : ''}
+                  onClick={() => setAbView('b')}
+                >B</button>
+              </div>
+            )}
+
             <div className="roll-overlay">
-              <div className="meta">
-                <span><span style={{ color: 'var(--fg-muted)' }}>BPM</span> <span className="v">{params.bpm}</span></span>
-                <span><span style={{ color: 'var(--fg-muted)' }}>KEY</span> <span className="v">{params.key}</span></span>
-                <span><span style={{ color: 'var(--fg-muted)' }}>BARS</span> <span className="v">{params.bars}</span></span>
-              </div>
-              <div />
-              <div className="meta" style={{ justifyContent: 'flex-end' }}>
-                <span style={{ color: 'var(--fg-muted)' }}>BASSLINE</span>
-                <span style={{ color: 'var(--fg-muted)' }}>ARP</span>
-                <span style={{ color: 'var(--accent)' }}>MELODY</span>
-              </div>
+              <span><span>BPM</span> <strong>{params.bpm}</strong></span>
+              <span><span>KEY</span> <strong>{params.key}</strong></span>
+              <span><span>BARS</span> <strong>{params.bars}</strong></span>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <Section
-        id="presets"
-        eyebrow="04 genre presets . single click"
-        title="Pick a <em>vibe.</em><br/>Skip the configuration."
-        sub="Each preset bakes BPM, key, mode, groove, and offline style for a specific moment in a set."
-      >
-        <PresetGrid active={activePreset} onSelect={onSelectPreset} />
-      </Section>
-
-      <Section
-        id="generate"
-        eyebrow="generation . live controls"
-        title="The console <em>is</em> the engine."
-        sub="Tweak parameters, press Generate, and three MIDI files land in your local cadenza-output folder."
-      >
-        <GenerationConsole params={params} setParams={setParams} />
-      </Section>
-
-      <Section
-        id="pipeline"
-        eyebrow="under the hood . 4 stages"
-        title="From <em>intent</em> to MIDI."
-        sub="Models produce validated musical specs; the deterministic Go renderer turns them into MIDI."
-      >
-        <Pipeline />
-      </Section>
-
-      <TweaksPanel title="Tweaks">
-        <TweakSection label="Accent">
-          <TweakRadio
-            value={String(tweaks.accent)}
-            onChange={value => setTweak('accent', value)}
-            options={[
-              { value: 'lime', label: 'Lime' },
-              { value: 'cyan', label: 'Cyan' },
-              { value: 'amber', label: 'Amber' },
-            ]}
-          />
-        </TweakSection>
-      </TweaksPanel>
-    </>
+      <LogDrawer open={logOpen} log={log} files={displayFiles} />
+      <StatusBar
+        params={params}
+        status={status}
+        files={displayFiles}
+        running={running}
+        lastSeed={lastSeed}
+        pinnedSeed={pinnedSeed}
+        onPinSeed={() => setPinnedSeed(lastSeed)}
+        onUnpinSeed={() => setPinnedSeed('')}
+      />
+    </div>
   )
 }

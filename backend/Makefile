@@ -1,6 +1,6 @@
 .PHONY: build test lint run clean listening-test test-integration test-coverage \
        docker docker-run release-snapshot release sonar vuln ci help install-tools \
-       desktop desktop-dev
+       desktop desktop-dev distributions
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -30,6 +30,13 @@ desktop-dev: ## Start Wails dev mode with HMR frontend
 desktop-manual: ## Manual Wails-style frontend + Go production build
 	cd cmd/desktop/frontend && npm install && npm run build
 	cd cmd/desktop && go build -tags "desktop,production" -ldflags="-w -s -H windowsgui" -o build/bin/cadenza-desktop.exe .
+
+distributions: ## Build release ZIPs with CLI + Wails desktop where available
+	cd .. && if command -v pwsh >/dev/null 2>&1; then \
+		pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build-distributions.ps1; \
+	else \
+		bash scripts/build-distributions.sh; \
+	fi
 
 ## Test
 
@@ -161,6 +168,7 @@ help:
 	@echo "  make desktop        Build Wails desktop EXE (Windows)"
 	@echo "  make desktop-dev    Start Wails dev mode (HMR)"
 	@echo "  make desktop-manual Manual frontend + Go desktop build"
+	@echo "  make distributions  Build release ZIPs with CLI + desktop"
 	@echo "  make docker         Build Docker image"
 	@echo ""
 	@echo "Test & Quality:"

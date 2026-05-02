@@ -46,7 +46,7 @@ output:
 logging:
   level: info              # debug | info | warn | error
   format: text             # text (dev) | json (production)
-  file: cadenza.log        # relative to output.dir
+  file: cadenza.log        # written to output.dir/logs/ unless absolute or already a path
 
 # ─── Cache ───────────────────────────────────────────────────────────
 cache:

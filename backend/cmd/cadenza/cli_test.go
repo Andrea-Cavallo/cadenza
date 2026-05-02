@@ -306,7 +306,7 @@ func TestProviderAndLoggerHelpers(t *testing.T) {
 	cfg.Logging.Level = "debug"
 	cfg.Logging.Format = "text"
 	setupLogger(outDir, cfg)
-	if _, err = os.Stat(filepath.Join(outDir, "cadenza.log")); err != nil {
+	if _, err = os.Stat(filepath.Join(outDir, "logs", "cadenza.log")); err != nil {
 		t.Fatalf("expected log file to exist: %v", err)
 	}
 }

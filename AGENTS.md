@@ -62,6 +62,7 @@ P0-binary
 | `cmd/cadenza/` | CLI entry point, interactive mode |
 | `cmd/desktop/` | Wails desktop app entry point and AppService bindings |
 | `cmd/desktop/frontend/` | Vite + React + TypeScript desktop UI embedded into the Wails binary |
+| `scripts/` | Local automation scripts for packaging and release builds |
 | `internal/theory/` | Key parsing, scales, note↔MIDI, chords, progressions |
 | `internal/schema/` | PatternSpec types + musical validator (with chord coherence check and soft musical scoring) |
 | `internal/llm/` | Provider interface, Claude (`tool_use`), Ollama (JSON schema mode), mock, retry with error classification |

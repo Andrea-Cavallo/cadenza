@@ -41,6 +41,7 @@ type GenerationResult struct {
 	VariationSeed string
 	BPM           float64
 	Key           string
+	Specs         map[string]*schema.PatternSpec
 }
 
 type patternResult struct {
@@ -142,6 +143,7 @@ func (mg *MultiGenerator) GeneratePartWithContext(ctx context.Context, musicCtx 
 		VariationSeed: musicCtx.VariationSeed,
 		BPM:           musicCtx.BPM,
 		Key:           keyStr,
+		Specs:         map[string]*schema.PatternSpec{patternType: spec},
 	}, nil
 }
 
@@ -220,6 +222,7 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 		VariationSeed: musicCtx.VariationSeed,
 		BPM:           musicCtx.BPM,
 		Key:           keyStr,
+		Specs:         patterns,
 	}, nil
 }
 

@@ -20,6 +20,8 @@
 > Three tracks. One key. One command.  
 > Drop them straight into your DAW — in under 2 seconds, without leaving the terminal.
 
+> Beta status: Cadenza is still in beta. The CLI and desktop app are usable, but prompts, presets, workflows, and output details may still evolve between releases.
+
 ---
 
 ## Install
@@ -126,9 +128,21 @@ To use the project after cloning, you need:
 - Optional: Wails CLI + Node.js for the desktop app
 - Optional: Ollama for local LLM mode
 
+### Beta and logs
+
+Cadenza is currently in **beta**. That means the project is already usable for sketching and iteration, but we still expect ongoing changes in UX, defaults, and musical behavior.
+
+If you are troubleshooting a run, the CLI writes application logs under the selected output directory:
+
+- default path after running from `backend/`: `backend/output/logs/cadenza.log`
+- general rule: `<output-dir>/logs/cadenza.log`
+
+If you override the output directory, the logs follow that folder. If you configure an absolute log path manually, that explicit path is used instead.
+
 ### Desktop app
 
 The desktop app is a Wails v2 shell around the same Go engine. It runs as a native Windows/macOS/Linux app and calls Go methods directly from the React UI; there is no HTTP service between the GUI and the generator.
+The provider panel checks whether API keys are configured, whether Ollama is installed and running, and which local Ollama models are available before generation starts.
 
 ```bash
 cd backend
@@ -139,6 +153,14 @@ make desktop-manual   # npm install + npm run build + Go production build
 
 `make desktop-manual` follows the Wails manual build flow: install frontend dependencies, build the Vite frontend, then compile Go with Wails production tags and Windows GUI ldflags.
 If `wails` is not on your PATH, run `make desktop WAILS=/path/to/wails`.
+
+To create local ZIP distributions from PowerShell:
+
+```powershell
+.\scripts\build-distributions.ps1 -Clean
+```
+
+The script writes Windows, macOS, and Linux packages to `dist/`. CLI binaries are cross-compiled for every package; Wails desktop binaries are included when the requested desktop platform can be built from the current machine.
 - Optional: API keys for Claude, OpenAI, or Gemini
 
 Check your Go version:
@@ -367,6 +389,17 @@ Dopo il clone servono:
 - opzionale: Ollama per la modalita LLM locale
 - opzionale: chiavi API per Claude, OpenAI o Gemini
 
+### Beta e log
+
+Cadenza e ancora in **beta**. Si puo gia usare davvero, ma UX, preset, workflow e dettagli dell'output possono ancora cambiare tra una release e l'altra.
+
+Per capire cosa succede dietro le quinte, la CLI scrive i log applicativi dentro la cartella di output:
+
+- percorso di default se lanci da `backend/`: `backend/output/logs/cadenza.log`
+- regola generale: `<output-dir>/logs/cadenza.log`
+
+Se cambi la cartella di output, i log seguono quella cartella. Se invece imposti manualmente un path assoluto per il file di log, viene usato quello.
+
 ### Provarlo subito senza build
 
 ```bash
@@ -484,6 +517,17 @@ Despues de clonar el repo necesitas:
 - opcional: `make`
 - opcional: Ollama para modo LLM local
 - opcional: claves API para Claude, OpenAI o Gemini
+
+### Beta y logs
+
+Cadenza sigue en **beta**. Ya se puede usar de verdad, pero la UX, los presets, los flujos y algunos detalles del output todavia pueden cambiar entre versiones.
+
+Para entender que esta pasando por detras, la CLI escribe los logs de la aplicacion dentro de la carpeta de salida:
+
+- ruta por defecto si ejecutas desde `backend/`: `backend/output/logs/cadenza.log`
+- regla general: `<output-dir>/logs/cadenza.log`
+
+Si cambias la carpeta de salida, los logs van con esa carpeta. Si defines manualmente una ruta absoluta para el log, se usa esa ruta explicitamente.
 
 ### Probarlo sin compilar
 

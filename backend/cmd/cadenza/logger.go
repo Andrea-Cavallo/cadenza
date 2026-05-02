@@ -16,11 +16,11 @@ func setupLogger(outputDir string, appCfg *config.AppConfig) {
 		slog.Error("cannot create output dir for log", "err", err)
 		return
 	}
-	logFile := appCfg.Logging.File
-	if logFile == "" {
-		logFile = "cadenza.log"
+	logPath := resolveLogPath(outputDir, appCfg.Logging.File)
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		slog.Error("cannot create log dir", "path", filepath.Dir(logPath), "err", err)
+		return
 	}
-	logPath := filepath.Join(outputDir, logFile)
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		slog.Error("cannot open log file", "path", logPath, "err", err)
@@ -40,6 +40,19 @@ func setupLogger(outputDir string, appCfg *config.AppConfig) {
 
 	slog.SetDefault(slog.New(handler))
 	slog.Info("cadenza started", "version", version, "log", logPath, "time", time.Now().Format(time.RFC3339))
+}
+
+func resolveLogPath(outputDir, logFile string) string {
+	if logFile == "" {
+		logFile = "cadenza.log"
+	}
+	if filepath.IsAbs(logFile) {
+		return logFile
+	}
+	if strings.Contains(logFile, string(os.PathSeparator)) || strings.Contains(logFile, "/") || strings.Contains(logFile, "\\") {
+		return filepath.Join(outputDir, logFile)
+	}
+	return filepath.Join(outputDir, "logs", logFile)
 }
 
 func parseSlogLevel(s string) slog.Level {

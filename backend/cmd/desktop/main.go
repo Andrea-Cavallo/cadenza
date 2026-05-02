@@ -18,6 +18,8 @@ func main() {
 		Title:            "Cadenza",
 		Width:            1280,
 		Height:           800,
+		MinWidth:         900,
+		MinHeight:        620,
 		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 1},
 		AssetServer:      &assetserver.Options{Assets: assets},
 		OnStartup:        app.startup,

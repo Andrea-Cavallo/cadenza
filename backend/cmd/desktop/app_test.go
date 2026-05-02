@@ -26,11 +26,19 @@ func TestGetProvidersContainsOffline(t *testing.T) {
 
 func TestStartupLoadsModelsAndStoresContext(t *testing.T) {
 	app := NewApp()
+	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
 	ctx := context.Background()
 	app.startup(ctx)
 
 	if app.ctx != ctx {
 		t.Fatal("expected startup context to be stored")
+	}
+	if app.logPath == "" {
+		t.Fatal("expected startup to initialize desktop logger")
+	}
+	if _, err := os.Stat(app.logPath); err != nil {
+		t.Fatalf("expected desktop log file to exist: %v", err)
 	}
 	if got := app.GetModels("claude"); len(got) == 0 {
 		t.Fatal("expected startup to load model catalog")
@@ -59,9 +67,54 @@ func TestGetModelsClaudeReturnsEntries(t *testing.T) {
 	}
 }
 
+func TestGetProviderStatusOfflineReady(t *testing.T) {
+	app := NewApp()
+
+	status := app.GetProviderStatus("offline")
+	if !status.Ready {
+		t.Fatalf("expected offline ready: %#v", status)
+	}
+	if !status.AuthConfigured {
+		t.Fatal("expected offline auth configured")
+	}
+}
+
+func TestGetProviderStatusClaudeMissingKey(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	app := NewApp()
+
+	status := app.GetProviderStatus("claude")
+	if status.Ready {
+		t.Fatalf("expected claude not ready without key: %#v", status)
+	}
+	if status.Message == "" || status.SetupHint == "" {
+		t.Fatalf("expected actionable status: %#v", status)
+	}
+}
+
+func TestGetProviderStatusClaudeConfigured(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	app := NewApp()
+
+	status := app.GetProviderStatus("claude")
+	if !status.Ready {
+		t.Fatalf("expected claude ready with key: %#v", status)
+	}
+}
+
+func TestGetProviderStatusUnknown(t *testing.T) {
+	app := NewApp()
+
+	status := app.GetProviderStatus("bad")
+	if status.Ready {
+		t.Fatalf("expected unknown provider not ready: %#v", status)
+	}
+}
+
 func TestGenerateOfflineWritesThreeFiles(t *testing.T) {
 	app := NewApp()
 	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
 
 	result, err := app.Generate(GenerateRequest{
 		BPM:          122,
@@ -84,6 +137,15 @@ func TestGenerateOfflineWritesThreeFiles(t *testing.T) {
 	if result.Seed == "" {
 		t.Fatal("expected seed")
 	}
+	if len(result.Preview.Patterns) != 3 {
+		t.Fatalf("expected 3 preview patterns, got %d", len(result.Preview.Patterns))
+	}
+	if len(result.Preview.Chords) == 0 {
+		t.Fatal("expected chord progression preview")
+	}
+	if result.Preview.StepsPerBar != 16 {
+		t.Fatalf("expected 16 steps per bar, got %d", result.Preview.StepsPerBar)
+	}
 	for _, path := range result.Files {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected generated file %q: %v", path, err)
@@ -91,9 +153,62 @@ func TestGenerateOfflineWritesThreeFiles(t *testing.T) {
 	}
 }
 
+func TestBuildGenerationPreviewUsesPatternSpecs(t *testing.T) {
+	app := NewApp()
+	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
+
+	result, err := app.Generate(GenerateRequest{
+		BPM:          122,
+		Key:          "Am",
+		Provider:     "offline",
+		NoLLM:        true,
+		Bars:         16,
+		Groove:       "straight",
+		OfflineStyle: "melodic",
+		Seed:         "preview-test",
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+
+	var activeNotes int
+	for _, pattern := range result.Preview.Patterns {
+		if pattern.Label == "" {
+			t.Fatalf("expected label for pattern %#v", pattern)
+		}
+		for _, step := range pattern.Steps {
+			if step.Active && step.MIDI > 0 && step.Note != "" {
+				activeNotes++
+			}
+		}
+	}
+	if activeNotes == 0 {
+		t.Fatal("expected preview to expose active MIDI notes")
+	}
+}
+
+func TestGenerateRejectsMissingClaudeKeyBeforeFallback(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	app := NewApp()
+	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
+
+	_, err := app.Generate(GenerateRequest{
+		BPM:      122,
+		Key:      "Am",
+		Provider: "claude",
+		Bars:     16,
+	})
+	if err == nil {
+		t.Fatal("expected preflight provider error")
+	}
+}
+
 func TestGenerateReturnsProviderError(t *testing.T) {
 	app := NewApp()
 	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
 
 	_, err := app.Generate(GenerateRequest{
 		BPM:      122,
@@ -109,6 +224,7 @@ func TestGenerateReturnsProviderError(t *testing.T) {
 func TestGenerateReturnsInvalidKeyError(t *testing.T) {
 	app := NewApp()
 	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
 
 	_, err := app.Generate(GenerateRequest{
 		BPM:      122,
@@ -133,6 +249,7 @@ func TestGenerateReturnsOutputDirError(t *testing.T) {
 
 	app := NewApp()
 	app.outputDir = file.Name()
+	defer func() { _ = app.closeLogger() }()
 	_, err = app.Generate(GenerateRequest{
 		BPM:      122,
 		Key:      "Am",

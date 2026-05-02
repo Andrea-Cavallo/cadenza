@@ -1,44 +1,59 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { GenerationPreview, TrackPreview } from '../types'
 
-const ROLL_BARS = 4
-const ROLL_STEPS_PER_BAR = 16
-const ROLL_TOTAL = ROLL_BARS * ROLL_STEPS_PER_BAR
-const ROLL_PITCH_MIN = 36
-const ROLL_PITCH_MAX = 84
-const ROLL_PITCH_RANGE = ROLL_PITCH_MAX - ROLL_PITCH_MIN
-
-const ROLL_NOTES = [
-  { p: 45, s: 0, l: 6, v: 0 }, { p: 45, s: 8, l: 6, v: 0 },
-  { p: 41, s: 16, l: 6, v: 0 }, { p: 41, s: 24, l: 6, v: 0 },
-  { p: 36, s: 32, l: 6, v: 0 }, { p: 36, s: 40, l: 6, v: 0 },
-  { p: 43, s: 48, l: 6, v: 0 }, { p: 43, s: 56, l: 6, v: 0 },
-  { p: 57, s: 0, l: 1, v: 1 }, { p: 60, s: 2, l: 1, v: 1 }, { p: 64, s: 4, l: 1, v: 1 }, { p: 60, s: 6, l: 1, v: 1 },
-  { p: 57, s: 8, l: 1, v: 1 }, { p: 60, s: 10, l: 1, v: 1 }, { p: 64, s: 12, l: 1, v: 1 }, { p: 67, s: 14, l: 1, v: 1 },
-  { p: 53, s: 16, l: 1, v: 1 }, { p: 57, s: 18, l: 1, v: 1 }, { p: 60, s: 20, l: 1, v: 1 }, { p: 65, s: 22, l: 1, v: 1 },
-  { p: 53, s: 24, l: 1, v: 1 }, { p: 57, s: 26, l: 1, v: 1 }, { p: 60, s: 28, l: 1, v: 1 }, { p: 57, s: 30, l: 1, v: 1 },
-  { p: 48, s: 32, l: 1, v: 1 }, { p: 52, s: 34, l: 1, v: 1 }, { p: 55, s: 36, l: 1, v: 1 }, { p: 60, s: 38, l: 1, v: 1 },
-  { p: 48, s: 40, l: 1, v: 1 }, { p: 52, s: 42, l: 1, v: 1 }, { p: 55, s: 44, l: 1, v: 1 }, { p: 64, s: 46, l: 1, v: 1 },
-  { p: 55, s: 48, l: 1, v: 1 }, { p: 59, s: 50, l: 1, v: 1 }, { p: 62, s: 52, l: 1, v: 1 }, { p: 67, s: 54, l: 1, v: 1 },
-  { p: 55, s: 56, l: 1, v: 1 }, { p: 62, s: 58, l: 1, v: 1 }, { p: 67, s: 60, l: 1, v: 1 }, { p: 71, s: 62, l: 1, v: 1 },
-  { p: 72, s: 4, l: 4, v: 2 }, { p: 76, s: 12, l: 3, v: 2 },
-  { p: 74, s: 18, l: 6, v: 2 }, { p: 77, s: 26, l: 4, v: 2 },
-  { p: 79, s: 34, l: 6, v: 2 }, { p: 76, s: 42, l: 4, v: 2 },
-  { p: 74, s: 50, l: 5, v: 2 }, { p: 71, s: 58, l: 6, v: 2 },
-]
+const PITCH_MIN = 33
+const PITCH_MAX = 96
+const PITCH_RANGE = PITCH_MAX - PITCH_MIN
 
 interface PianoRollProps {
   width?: number
   height?: number
   bpm?: number
+  playing?: boolean
+  preview?: GenerationPreview | null
+  kept?: boolean
+  onKeep?: () => void
+  onDiscard?: () => void
+  onExportAll?: () => void
 }
 
-export function PianoRoll({ width = 1480, height = 420, bpm = 122 }: PianoRollProps) {
+export function PianoRoll({
+  width = 1480,
+  height = 420,
+  bpm = 122,
+  playing = false,
+  preview = null,
+  kept = false,
+  onKeep,
+  onDiscard,
+  onExportAll,
+}: PianoRollProps) {
+  const [activeType, setActiveType] = useState('bassline')
   const [t, setT] = useState(0)
   const startRef = useRef<number | null>(null)
   const rafRef = useRef<number | null>(null)
-  const cycleSec = (60 / bpm) * 4 * ROLL_BARS
+
+  const activeTrack = useMemo(() => {
+    if (!preview?.patterns.length) return null
+    return preview.patterns.find(pattern => pattern.patternType === activeType) ?? preview.patterns[0]
+  }, [activeType, preview])
 
   useEffect(() => {
+    if (!preview?.patterns.some(pattern => pattern.patternType === activeType)) {
+      setActiveType(preview?.patterns[0]?.patternType ?? 'bassline')
+    }
+  }, [activeType, preview])
+
+  const totalSteps = Math.max(activeTrack?.steps.length ?? preview?.stepsPerBar ?? 16, 16)
+  const cycleSec = (60 / bpm) * 4
+
+  useEffect(() => {
+    if (!playing) {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+      setT(0)
+      startRef.current = null
+      return
+    }
     const tick = (now: number) => {
       if (startRef.current == null) startRef.current = now
       const elapsed = (now - startRef.current) / 1000
@@ -46,65 +61,180 @@ export function PianoRoll({ width = 1480, height = 420, bpm = 122 }: PianoRollPr
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-    }
-  }, [cycleSec])
+    return () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current) }
+  }, [cycleSec, playing])
+
+  if (!preview || preview.patterns.length === 0) {
+    return (
+      <div className="real-roll empty-preview">
+        <div className="empty-preview-inner">
+          <div className="empty-preview-title">No MIDI generated yet</div>
+          <div className="empty-preview-copy">Generate a session to inspect Bass, Arp, and Melody notes.</div>
+        </div>
+      </div>
+    )
+  }
 
   const W = width
   const H = height
-  const padTop = 24
-  const padBot = 36
+  const padTop = 58
+  const padBot = 34
   const innerH = H - padTop - padBot
-  const stepW = W / ROLL_TOTAL
-  const noteH = innerH / ROLL_PITCH_RANGE
+  const stepW = W / totalSteps
+  const noteH = innerH / PITCH_RANGE
   const playheadX = t * W
 
-  const voiceColor = (v: number, active: boolean) => {
-    if (active) return 'var(--accent)'
-    if (v === 0) return '#3a3a3a'
-    if (v === 1) return '#888888'
-    return '#ffffff'
-  }
-  const voiceOpacity = (v: number) => (v === 0 ? 0.85 : v === 1 ? 0.9 : 1)
+  const grids = Array.from({ length: totalSteps + 1 }, (_, step) => ({
+    x: step * stepW,
+    isBeat: step % 4 === 0,
+    isBar: step % (preview.stepsPerBar || 16) === 0,
+  }))
 
-  const notes = ROLL_NOTES.map((n, i) => {
-    const x = n.s * stepW
-    const w = Math.max(stepW * n.l - 1, 2)
-    const y = padTop + (ROLL_PITCH_MAX - n.p) * noteH
-    const h = Math.max(noteH - 1, 2)
-    const active = playheadX >= x && playheadX < x + w
-    return { i, x, y, w, h, v: n.v, active }
-  })
+  const octaves = []
+  for (let p = 36; p <= 96; p += 12) {
+    octaves.push(padTop + (PITCH_MAX - p) * noteH)
+  }
 
-  const grids = []
-  for (let s = 0; s <= ROLL_TOTAL; s++) {
-    if (s % 4 !== 0) continue
-    grids.push({ x: s * stepW, isBar: s % ROLL_STEPS_PER_BAR === 0 })
-  }
-  const octs = []
-  for (let p = ROLL_PITCH_MIN; p <= ROLL_PITCH_MAX; p += 12) {
-    octs.push(padTop + (ROLL_PITCH_MAX - p) * noteH)
-  }
+  const notes = buildRollNotes(activeTrack, stepW, noteH, padTop, playheadX)
 
   return (
-    <svg className="roll-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      {octs.map((y, i) => (
-        <line key={`o${i}`} x1={0} x2={W} y1={y} y2={y} stroke="var(--line)" strokeWidth="1" />
-      ))}
-      {grids.map((g, i) => (
-        <line key={`g${i}`} x1={g.x} x2={g.x} y1={padTop} y2={H - padBot} stroke={g.isBar ? 'var(--line-2)' : 'var(--line)'} strokeWidth="1" />
-      ))}
-      {notes.map(n => (
-        <rect key={n.i} x={n.x + 1} y={n.y} width={n.w} height={n.h} fill={voiceColor(n.v, n.active)} opacity={n.active ? 1 : voiceOpacity(n.v)} style={{ transition: 'opacity 80ms linear' }} />
-      ))}
-      <line x1={playheadX} x2={playheadX} y1={padTop - 4} y2={H - padBot + 4} stroke="var(--accent)" strokeWidth="1.5" />
-      <circle cx={playheadX} cy={padTop - 4} r="3" fill="var(--accent)" />
-      {[0, 1, 2, 3].map(b => (
-        <text key={b} x={b * ROLL_STEPS_PER_BAR * stepW + 8} y={H - 14} fill="var(--fg-muted)" fontFamily="var(--mono)" fontSize="10" letterSpacing="2">
-          {String(b + 1).padStart(2, '0')}
-        </text>
-      ))}
-    </svg>
+    <div className="real-roll">
+      <div className="roll-chords">
+        {preview.chords.length === 0 ? (
+          <span className="chord-pill muted">No chord progression</span>
+        ) : preview.chords.map(chord => (
+          <span key={`${chord.name}-${chord.fromBar}-${chord.toBar}`} className="chord-pill">
+            <strong>{chord.name}</strong>
+            <span>bars {chord.fromBar}-{chord.toBar}</span>
+          </span>
+        ))}
+      </div>
+
+      <div className="roll-tabs">
+        {preview.patterns.map(pattern => (
+          <button
+            key={pattern.patternType}
+            type="button"
+            className={pattern.patternType === activeTrack?.patternType ? 'on' : ''}
+            onClick={() => setActiveType(pattern.patternType)}
+          >
+            {pattern.label}
+          </button>
+        ))}
+      </div>
+
+      <svg
+        className="roll-svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+      >
+        {octaves.map((y, i) => (
+          <line key={`o${i}`} x1={0} x2={W} y1={y} y2={y} stroke="rgba(255,255,255,0.07)" strokeWidth="1" />
+        ))}
+        {grids.map((g, i) => (
+          <line
+            key={`g${i}`}
+            x1={g.x}
+            x2={g.x}
+            y1={padTop}
+            y2={H - padBot}
+            stroke={g.isBar ? 'rgba(255,255,255,0.14)' : g.isBeat ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.035)'}
+            strokeWidth="1"
+          />
+        ))}
+        {notes.map(note => (
+          <g key={note.key}>
+            <rect
+              x={note.x + 1}
+              y={note.y}
+              width={note.w}
+              height={note.h}
+              fill={noteColor(activeTrack?.patternType, note.active)}
+              opacity={note.opacity}
+            />
+            {note.label && (
+              <text
+                x={note.x + 7}
+                y={note.y + Math.max(note.h - 5, 11)}
+                fill="rgba(0,0,0,0.72)"
+                fontFamily="var(--mono)"
+                fontSize="10"
+              >
+                {note.label}
+              </text>
+            )}
+          </g>
+        ))}
+        {playing && (
+          <>
+            <line x1={playheadX} x2={playheadX} y1={padTop - 4} y2={H - padBot + 4}
+              stroke="var(--accent)" strokeWidth="1.5" />
+            <circle cx={playheadX} cy={padTop - 4} r="3" fill="var(--accent)" />
+          </>
+        )}
+        {Array.from({ length: Math.ceil(totalSteps / 4) }, (_, beat) => (
+          <text
+            key={beat}
+            x={beat * 4 * stepW + 8}
+            y={H - 13}
+            fill="rgba(255,255,255,0.25)"
+            fontFamily="var(--mono)"
+            fontSize="10"
+          >
+            {String(beat + 1).padStart(2, '0')}
+          </text>
+        ))}
+      </svg>
+
+      <div className="preview-actions">
+        <button type="button" className={`btn ghost ${kept ? 'kept' : ''}`} onClick={onKeep}>
+          {kept ? 'Kept' : 'Keep'}
+        </button>
+        <button type="button" className="btn ghost" onClick={onDiscard}>Discard</button>
+        <button type="button" className="btn primary" onClick={onExportAll}>Export all</button>
+      </div>
+    </div>
   )
+}
+
+function buildRollNotes(track: TrackPreview | null, stepW: number, noteH: number, padTop: number, playheadX: number) {
+  if (!track) return []
+  return track.steps
+    .filter(step => step.active && step.midi > 0)
+    .map((step, index) => {
+      const x = step.step * stepW
+      const length = step.legato || step.slide ? 1.85 : step.staccato ? 0.56 : 0.92
+      const w = Math.max(stepW * length - 2, 4)
+      const y = padTop + (PITCH_MAX - clamp(step.midi, PITCH_MIN, PITCH_MAX)) * noteH
+      const h = Math.max(noteH * (step.accent ? 1.45 : 1.05), 4)
+      const active = playheadX >= x && playheadX < x + w
+      return {
+        key: `${track.patternType}-${step.step}-${step.note}-${index}`,
+        x,
+        y,
+        w,
+        h,
+        active,
+        label: step.note,
+        opacity: active ? 1 : step.ghost ? 0.42 : step.accent ? 0.96 : 0.78,
+      }
+    })
+}
+
+function noteColor(patternType = '', active: boolean) {
+  if (active) return 'var(--accent)'
+  switch (patternType) {
+    case 'bassline':
+      return '#01FF95'
+    case 'arpeggio':
+      return '#FFB000'
+    case 'melody':
+      return '#F6FBFF'
+    default:
+      return 'var(--fg-dim)'
+  }
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
 }
