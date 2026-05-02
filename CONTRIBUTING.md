@@ -1,36 +1,60 @@
 # Contributing
 
-Contributions are welcome. This document explains how to get started.
+Contributions are welcome. This guide is here to make the first steps easy and to help contributors start from the current project structure instead of stale assumptions.
+
+## Contributors wanted
+
+Cadenza is an AI-powered MIDI generator for progressive house and melodic techno, written in Go.
+
+We are especially looking for contributors interested in:
+
+- MIDI generation
+- Go backend development
+- music theory
+- AI-assisted composition
+- CLI tools
+- desktop app UX
+- documentation and examples
+
+Good first issues are available here:
+[https://github.com/Andrea-Cavallo/cadenza/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22](https://github.com/Andrea-Cavallo/cadenza/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+
+If you are not sure where to begin, documentation, contributor onboarding, examples, and small UX improvements are all valuable contributions too.
 
 ## Development Setup
 
 ```bash
 # Prerequisites
 go install golang.org/x/tools/cmd/goimports@latest
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0
 
 # Clone
 git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza
+cd cadenza/backend
 
 # Verify
+go build ./...
 make test
-make lint
+make ci
 ```
+
+The active Go application lives in `backend/`. Most contributor work for the CLI, generator, renderer, LLM integrations, and tests starts there.
 
 ## Project Structure
 
 ```
-cmd/cadenza/     CLI entry point
-internal/
-  theory/           Music theory (keys, scales, chords, progressions)
-  schema/           PatternSpec types + musical validator
-  llm/              LLM provider interface + implementations
-  generator/        Pattern generation (single, multi, offline)
-  renderer/         MIDI rendering pipeline
-  midi/             MIDI file writer
-  cache/            LLM response cache
-prompts/            LLM prompt templates
+backend/cmd/cadenza/              CLI entry point
+backend/cmd/desktop/              Wails desktop shell
+backend/cmd/desktop/frontend/     React + TypeScript desktop UI
+backend/internal/theory/          Music theory (keys, scales, chords, progressions)
+backend/internal/schema/          PatternSpec types + musical validator
+backend/internal/llm/             LLM provider interface + implementations
+backend/internal/generator/       Pattern generation (single, multi, offline)
+backend/internal/renderer/        MIDI rendering pipeline
+backend/internal/midi/            MIDI file writer
+backend/internal/cache/           LLM response cache
+backend/prompts/                  LLM prompt templates
+scripts/                          Packaging and release helpers
 ```
 
 ## Workflow
@@ -38,7 +62,7 @@ prompts/            LLM prompt templates
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/my-feature`
 3. Make changes
-4. Run checks: `make test && make lint`
+4. Run checks from `backend/`: `make ci`
 5. Commit with conventional format: `feat: add new style profile`
 6. Open a pull request against `main`
 
@@ -60,8 +84,8 @@ Types: feat, fix, refactor, docs, test, chore, perf, ci
 
 ## Adding an LLM Provider
 
-1. Implement `llm.Provider` interface in `internal/llm/<name>.go`
-2. Wire it in `internal/generator/multi_generator.go`'s `buildProvider`
+1. Implement `llm.Provider` interface in `backend/internal/llm/<name>.go`
+2. Wire it into the provider selection flow used by the current CLI/generator path
 3. Add integration test with `//go:build integration` tag
 
 ## Musical Rules
@@ -85,6 +109,8 @@ make listening-test     # generate patterns for DAW comparison
 ```
 
 Target: 80%+ coverage on all packages with logic.
+
+When updating docs or examples, please verify that commands still match the current `backend/` layout and current flags. A lot of friction for new contributors comes from stale copy more than from hard code.
 
 ## Code Style
 

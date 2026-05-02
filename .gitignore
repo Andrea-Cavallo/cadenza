@@ -1,5 +1,6 @@
 # Build output
 bin/
+dist/
 *.exe
 *.exe~
 *.dll
@@ -20,6 +21,13 @@ debug/
 
 # Cache
 .cache/
+
+# Desktop frontend
+backend/cmd/desktop/frontend/dist/
+backend/cmd/desktop/frontend/node_modules/
+backend/cmd/desktop/frontend/wailsjs/
+backend/cmd/desktop/frontend/package.json.md5
+backend/cmd/desktop/build/bin/
 
 # IDE
 .idea/
@@ -48,3 +56,5 @@ docs/
 
 # Claude Code / AI
 .claude/
+# Git worktrees
+.worktrees/

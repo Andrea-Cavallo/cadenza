@@ -1,0 +1,26 @@
+{
+  "purpose": "A/B listening fixtures for comparing one-step LLM generation against MusicalPlan + critic generation.",
+  "comparison_method": [
+    "Generate each case once with the current planner+critic pipeline.",
+    "Generate a control build with planner/critic disabled or from a pre-P0-0f commit.",
+    "Import bassline, arpeggio, and melody into the same DAW project at the declared BPM.",
+    "Score motif clarity, repetition fatigue, chord coherence, section arc, and track separation after 16 bars."
+  ],
+  "cases": [
+    {
+      "name": "am_progressive_midset",
+      "command": "cadenza --bpm 122 --key Am --provider claude",
+      "expected_improvement": "less static melody contour, clearer bass root anchor, more intentional section 9-12 tension"
+    },
+    {
+      "name": "dm_dorian_peak",
+      "command": "cadenza --bpm 128 --key Dm-dorian --provider claude",
+      "expected_improvement": "raised-sixth Dorian color appears as planned tension instead of random passing tone"
+    },
+    {
+      "name": "g_mixolydian_festival",
+      "command": "cadenza --bpm 124 --key G-mixolydian --provider claude",
+      "expected_improvement": "brighter hook contour, stronger flat-seventh payoff, fewer arp/melody collisions"
+    }
+  ]
+}

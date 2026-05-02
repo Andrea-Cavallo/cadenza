@@ -8,15 +8,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Wails v2 desktop app (`backend/cmd/desktop/`) with a standalone `cadenza-desktop.exe` binding the Go MIDI engine directly to a React frontend, no HTTP layer.
+- `AppService` methods exposed to Wails (`Generate`, `GetProviders`, `GetModels`, `GetConfig`, `OpenOutputFolder`) plus progress events for the desktop generation log.
+- Vite + React + TypeScript desktop frontend ported from the JSX prototype, including presets, piano roll, pipeline view, and local generation console.
+- `make desktop`, `make desktop-dev`, and `make desktop-manual`; the manual target follows Wails' documented npm-build-plus-Go-production-build flow.
+- Desktop output defaults to `~/cadenza-output/`, with a cross-platform Open Folder command.
+- Desktop frontend toolchain uses Vite 8 with a clean `npm audit` result.
+- Desktop provider setup panel now shows Claude/OpenAI/Gemini API-key readiness, Ollama install/runtime/model status, local model selection, Refresh, Start Ollama, and provider setup links.
+- PowerShell distribution builder (`scripts/build-distributions.ps1`) packages Windows, macOS, and Linux ZIPs with cross-compiled CLI binaries and Wails desktop binaries when the target build is available locally.
+- Desktop frontend redesign first pass: fixed black/cyan app shell with title bar, preset sidebar, generation controls, collapsible log drawer, output panel, and status bar.
+- Desktop app logger now writes to `~/cadenza-output/logs/cadenza-desktop.log` by default and mirrors backend `slog` lines into the UI log drawer in realtime.
+- Desktop MIDI preview now replaces the animated demo roll with a real post-generation PatternSpec viewer, including Bass/Arp/Melody tabs, chord progression pills, active notes, and Keep/Discard/Export all actions.
+- Desktop log drawer now shows step-by-step generation progress (`provider`, `plan`, `generate`, `render`, `write`) and operational error messages with the next button or setup action to use.
+- Desktop packaging now includes cross-platform distribution scripts, a multi-OS GitHub Actions matrix, Windows ZIP content validation, and the Cadenza icon for Wails desktop binaries.
+- Desktop sidebar now uses a minimal producer workflow: key, BPM, bars, provider, and Generate only; frontend genre presets and the Advanced drawer were removed.
+
+### Fixed
+- Desktop generation now preflights selected providers before rendering, so missing API keys or unavailable Ollama produce clear UI errors instead of silently falling back to offline output.
+- Desktop provider status no longer truncates important Ollama/setup messages and now separates readiness summary, model count, and action buttons in one visible provider section.
+- `install-tools` now installs golangci-lint v2 and `.golangci.yml` declares Go `1.25.9`, keeping lint aligned with the module toolchain.
+- Prompt files are now embedded into the binary via `//go:embed` (`internal/prompts/`); the app no longer falls back to offline mode when the binary is run from a directory other than the project root.
+- Ollama/small-model validation failures: system prompt, correction examples, and all three prompt templates now explicitly list the valid evolution `action` catalog and enforce `intensity` as a float in `[0.0, 1.0]`, preventing the "unknown action" and "intensity out of range" retry loops.
+- Dynamic model catalog (`internal/models/models.yaml`) embedded in binary; add new models by editing YAML without recompiling. Local override at `~/.cadenza/models.yaml` or `./models.yaml` takes precedence. Interactive CLI now shows a numbered model menu after engine selection. 12 Ollama models pre-configured (Qwen 2.5 7B/14B/32B, Llama 3.x, Mistral, Mixtral, Gemma2, Phi-4, DeepSeek-R1, Qwen Coder).
+- Range correction examples are now pattern-type-specific (bassline/arpeggio/melody octave guidance), reducing wrong-octave retries.
+- Critic revision prompt now includes explicit density constraints per pattern type (bassline 8-13, arpeggio 12-16, melody 4-10), preventing revision from stripping notes below minimum density.
+
+### Added
+- **LLM MusicalPlan foundation**: `internal/generator/planner.go` adds a production-intent plan before PatternSpec generation, including mood, energy, tension curve, rhythmic identity, motif concept, density target, call/response, section intentions, track separation, and revision priorities.
+- **Producer style cards**: LLM prompts now receive compact style-card direction (`afterlife-dark`, `prydz-progressive`, `minimal-hypnotic`, `festival-melodic`, `warehouse-driving`) derived from mode, BPM, and `MusicContext.OfflineStyle`.
+- **`{{MUSICAL_PLAN}}` prompt injection**: bassline, arpeggio, and melody prompts now include the generated musical plan before note selection, making AI mode more intentional and less one-shot/mechanical.
+- **Musical scoring report**: `Validator.ScoreMusicality()` adds soft quality metrics for repeated 4-step phrases, downbeat chord-tone ratio, pitch contour diversity, articulation flatness, section densities, and warnings.
+- **Planner-aware cache keys**: LLM PatternSpec cache keys now include planner version, style-card version, and style-card name to avoid reusing stale responses after musical-intent changes.
+- **Critic + targeted revision loop**: valid LLM PatternSpecs now receive a critic pass and, when needed, one targeted revision round that fixes only weak musical dimensions while preserving schema, seed, key, scale, and chord alignment.
+- **Anti-loop validation**: validator now rejects 4-step phrases repeated more than twice without rhythmic, pitch, or articulation variation.
+- **Cross-track arrangement scoring**: `schema.ScoreArrangement()` reports shared density peaks and melody/arpeggio pitch/register collisions across the generated trio.
+- **Listening fixtures**: added `testdata/listening/llm_quality_cases.json` for A/B evaluation of one-step LLM generation vs planner+critic generation.
+- **Post-run key and part iteration**: added "same motifs, new key", single-part regeneration for bassline/arpeggio/melody, and lock-progression mode to the interactive post-run menu.
+- **`--json` output mode**: prints machine-readable generation summaries for scripts and DAW integrations.
+- **`cadenza config init`**: scaffolds an annotated starter `cadenza.yaml`; supports `--force` to overwrite.
+- **Representative example MIDI sets**: generated local examples for Am 122 BPM, Dm-dorian 128 BPM, and G-mixolydian 124 BPM under `output/examples/`.
+- **Provider failure choice screen** (`handleProviderFailure`): when provider init fails in interactive mode, shows a menu — retry / switch to offline / switch to a different provider / cancel — instead of hard-exiting. Controlled by `cliConfig.Interactive` so flag mode and CI are unaffected.
+- **`--doctor` flag**: runs `runDoctorCheck`, which prints a diagnostic report: Go runtime version, API key presence (Claude, OpenAI, Gemini), Ollama reachability, and output directory writability.
+- **`--non-interactive` flag**: explicitly forces flag mode (skips TUI); useful in CI and headless scripts. Requires `--bpm` and `--key` (or `--from-spec`) to be present.
+- **Absolute output paths**: the success screen now prints `filepath.Abs(f)` for each generated MIDI file so the path is directly usable in any working directory.
+- **`cliConfig.Interactive` field**: set to `true` by `runInteractiveCLI`; gates interactive-only behaviour like the provider failure screen.
+- **Doctor tests**: `TestRunDoctorCheck`, `TestPrintDoctorItem`, `TestCheckOllamaReachable` (with httptest server).
+- **Provider failure tests**: `TestHandleProviderFailure` covers retry, switch-to-offline, switch-provider, cancel, and invalid-then-cancel paths.
+- **Interactive flag test**: `TestRunInteractiveCLI_SetsInteractive` asserts `cfg.Interactive = true` after a successful guided session.
+
+
+- **Genre presets**: four built-in presets (`progressive-warmup`, `peak-time-driver`, `afterhours-hypnotic`, `festival-melodic`) — each pre-fills key, BPM, groove, and offline style. Accessible via `--preset <name>` flag and via interactive preset picker before the full guided session.
+- **Expanded post-run actions**: interactive menu now offers 8 options — new session, same setup, same harmony + new motifs (locked progression), A/B compare (outputs to `A/` and `B/` subdirs), faster (+6 BPM), slower (-6 BPM), busier (driving style), sparser (hypnotic style).
+- **BPM hint after key confirmation**: `keyBPMHint()` shows typical BPM range for the chosen mode in the interactive key selector.
+- **`progressionToCLIString()`**: converts a `ChordProgression` to `Am-F-C-G` format for the `--progression` flag; used by same-harmony action to lock the progression.
+- **`lastRunInfo` state tracking**: successful generations update a package-level `lastRun` struct, enabling post-run actions to reference the prior seed and chord progression.
+- **`clampBPM()`**: bounds BPM to [80, 150] for faster/slower directional actions.
+- **README rewrite (P1)**: opening paragraph leads with what you hear; added "Install (one-liner)", "Why Cadenza?", "Producer Workflow" sections; updated Features list with all new capabilities.
+- **`--offline-style` CLI flag**: exposes `MusicContext.OfflineStyle` to non-interactive flag mode (`hypnotic | driving | minimal | melodic`); validated by `validateFlags`.
+- **Energy selector (1–5) in interactive CLI**: new `selectEnergy()` step between mode selection and tempo; maps energy level to groove preset and offline style suggestion; Enter skips.
+- **Musical mood description after key confirmation**: `keyMoodDescription()` prints a producer-friendly emotional character summary (e.g. "A natural minor — dark, introspective, club-friendly") immediately after scale notes.
+- **Reproduce command after every successful run**: `reproduceCmd()` builds and prints the exact CLI command to recreate any generation, including seed, provider, groove, offline style, and custom progression.
+- **`OfflineStyle` shown in interactive summary**: `printSummary()` now shows GROOVE and STYLE when non-default values are active.
+- **Coverage milestone**: `cmd/cadenza` now at 80.3% (up from 67.9%) — P3 SonarCloud quality gate passed for this package.
+- **New dev mode tests**: `TestRunDevMode_QuitAndCommands`, `TestDevGenerate`, `TestDevValidate` cover the interactive REPL, generation, and validation helpers.
+- **New CLI helper tests**: `TestKeyMoodDescription`, `TestReproduce`, `TestRunInteractiveCLI_WithEnergy`, `TestConfirmInteractiveRender_Branches`, `TestProviderHelpers`, `TestModeLabel_AllModes`, `TestSelectEnergy_InvalidInput`.
+
+
+- **Offline key differentiation**: seedHash for all three offline pattern generators (bass, arp, melody) now includes `key.Root + key.Scale` so identical seeds produce distinct rhythmic patterns for different keys (not just different root notes).
+- **Chord third in bass patterns**: `chordThird()` helper added; cases 0 and 4 of `basslineTemplate` now incorporate the chord's third note (minor 3rd for dark minor feel, major 3rd for brighter major/Dorian quality).
+- **Expanded melody rhythm pool**: two additional rhythm patterns added (`triplet-ish push`, `tension-hold`) for 7 total — ensures ≥6 distinct patterns across 20 seeds.
+- **Bass density guarantee**: `ensureBassMinDensity()` enforces ≥8 active steps by filling off-beat positions with ghost notes when the hash selects too many sparse patterns.
+- **Key-character offline shaping**: basslines now prefer mode character tones when chord-safe, arpeggios bias direction by key+seed, and melodies choose ascending, descending, or tension-hold contours from the same key-aware seed hash.
+- **Cache seed regression test**: `TestKeyIncludesVariationSeed` verifies different variation seeds produce different SHA256 disk-cache keys.
+- **Interactive modal key regression test**: CLI key selection is covered for modal examples so Dorian, Phrygian, Mixolydian, and Lydian prompts stay visible.
+- **Mode-character prompt injection**: LLM prompts now receive a key-specific mode description with scale notes, interval character, and emotional color through `{{MODE_CHARACTER}}`.
+- **Offline sub-modes**: `MusicContext.OfflineStyle` now supports `melodic`, `hypnotic`, `driving`, and `minimal` deterministic templates for bassline, arpeggio, and melody.
+- **Offline passing notes and gate variation**: offline templates add seed-controlled 15-25% passing-note opportunities where scale-safe, and every generated pattern mixes legato and staccato articulation.
+- **Offline quality tests**: added regression coverage for rhythmic figure counts, sub-mode density/validation, passing notes, and gate variation.
+- **Tests `TestOfflineSeedDiversity` and `TestOfflineKeyDifferentiation`**: assert ≥6 distinct step fingerprints from 20 seeds (all three pattern types) and that Am/Dm with the same seed produce different rhythmic structures.
+- **Modal scale support**: `ParseKey` now accepts `-dorian`, `-phrygian`, `-mixolydian`, `-lydian` suffixes (e.g. `Am-dorian`, `G-mixolydian`), case-insensitive, with or without leading `m`.
+- **Expanded chord quality map**: `scaleChordQualities` now covers Dorian, Phrygian, Mixolydian, and Lydian modes with correct diatonic chord qualities computed from each mode's interval structure.
+- **Expanded progression pools**: Minor (Aeolian) and Major (Ionian) pools grown from 4 to 12 progressions each; Dorian, Phrygian, Mixolydian, and Lydian each have 8 dedicated progressions. Seed entropy now sufficient: 10 consecutive seeds produce ≥ 6 distinct progressions.
+- **Mixolydian and Lydian scales** added to `scaleIntervals` (previously only Dorian and Phrygian were present).
+- **Musical regression tests**: `TestProgressionSeedDiversity`, `TestKeyDifferentiation`, `TestProgressionPool_Modal`, `TestParseKey_Modal`, `TestParseKey_Modal_Invalid` added to `internal/theory`.
+- Rewrote `TODO.md` with prioritised P0/P1/P2/P3 structure, checkboxes, and root-cause analysis for the zero-star problem.
+
+### Fixed
+- **`approachNote` now stays diatonic**: was generating a chromatic semitone below the chord root, violating the "notes must be in the declared scale" invariant and causing the validator to reject offline templates for certain chord roots (e.g. Dm → C#2 in A minor context). Now returns the nearest scale degree below the root instead.
+- **`chooseBassProfile` profile name corrected**: was returning `"bass_techno_driving"` (not in the validator's allowed profile list) for high-BPM minor keys; corrected to `"bass_driving"`.
+
+### Removed
+- **`cmd/llmidi-gen/` deleted**: the original prototype binary was superseded by `cmd/cadenza` (which uses `GenerateWithContext`, supports 4 providers, variations, grooves, drums, dry-run, watch mode, and dev mode). Having two entry points confused contributors and users.
+- Fixed `docker-compose-up` Makefile target which still referenced the deleted `llmidi-gen` service.
+
+### Added
 - Added `TODO.md` coverage plan quantifying the gap to 80% and prioritizing missing tests by package.
 
 ### Changed
+- Updated `README.md` to clearly mark the project as beta and document that CLI logs are written under `<output-dir>/logs/cadenza.log` by default.
+- Refreshed `CONTRIBUTING.md` with current `backend/`-based setup instructions and a stronger "Contributors wanted" section for new collaborators.
 - Reduced validator and dev-mode flag parsing complexity by extracting focused helper functions.
 - Run the Docker smoke test container with the runner UID/GID so mounted `output/` remains writable without restoring world-writable permissions.
 - Pinned `JetBrains/qodana-action` in the Qodana workflow to a full commit SHA to satisfy dependency pinning security checks.
 - Refactored CLI, generator, and LLM coverage tests into smaller helpers to clear remaining Sonar cognitive-complexity and Go idiom warnings without reducing coverage.
 - Rewrote the README in English, Italian, and Spanish and highlighted offline algorithmic generation as a core strength rather than a fallback.
 - Expanded the README with practical post-clone setup, build, and run instructions for Windows, macOS, and Linux users.
+- Improved the interactive CLI with a quick-start offline sketch path, clearer provider availability guidance, and output-directory writability checks before rendering.
+- Expanded the interactive CLI post-run flow with explicit next actions, including rerunning the same setup with a fresh seed.
+- Moved backend application logs into an explicit `logs/` subdirectory under the output folder so beta builds produce easier-to-find runtime logs.
 
 ### Removed
 - **Dead code cleanup** — Removed 480+ lines of unused code identified through static analysis
