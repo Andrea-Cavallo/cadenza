@@ -58,3 +58,5 @@ docs/
 .claude/
 # Git worktrees
 .worktrees/
+CLAUDE.md
+AGENTS.md
