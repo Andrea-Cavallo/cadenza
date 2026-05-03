@@ -908,6 +908,51 @@ func TestMelodyContourDiversity(t *testing.T) {
 	}
 }
 
+func TestWithinLeap(t *testing.T) {
+	if !withinLeap("C", "D", 4) {
+		t.Error("C→D should be within 4 semitones")
+	}
+	if !withinLeap("C", "G", 5) {
+		t.Error("C→G (5 semitones wrap) should be within 5")
+	}
+	if withinLeap("C", "F#", 5) {
+		t.Error("C→F# (6 semitones) should NOT be within 5")
+	}
+}
+
+func TestResolveTargetNote_ReturnsValidNote(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	scaleNotes, _ := theory.ScaleNotes("A", "minor_natural")
+	chordTones := []string{"A", "C", "E"}
+
+	for degree := 0; degree < 7; degree++ {
+		result := resolveTargetNote(chordTones, scaleNotes, degree, key)
+		if result == "" {
+			t.Errorf("degree %d: got empty note", degree)
+		}
+	}
+}
+
+func TestMelodyNotePreferHigher(t *testing.T) {
+	noteHigh := melodyNote("C", "5", true)
+	midiHigh, err := theory.NoteToMIDI(noteHigh)
+	if err != nil || midiHigh != 84 {
+		t.Errorf("melodyNote(C,5,true): expected C6=84, got %s MIDI=%d err=%v", noteHigh, midiHigh, err)
+	}
+
+	noteLow := melodyNote("C", "5", false)
+	midiLow, err := theory.NoteToMIDI(noteLow)
+	if err != nil || midiLow != 72 {
+		t.Errorf("melodyNote(C,5,false): expected C5=72, got %s MIDI=%d err=%v", noteLow, midiLow, err)
+	}
+
+	noteFallback := melodyNote("E", "5", true)
+	midiFallback, err := theory.NoteToMIDI(noteFallback)
+	if err != nil || midiFallback < 60 || midiFallback > 84 {
+		t.Errorf("melodyNote(E,5,true): expected range [60,84], got %s MIDI=%d err=%v", noteFallback, midiFallback, err)
+	}
+}
+
 func stepActivityFingerprint(steps []schema.StepSpec) string {
 	b := make([]byte, len(steps))
 	for i, s := range steps {

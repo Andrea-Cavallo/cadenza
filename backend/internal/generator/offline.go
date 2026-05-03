@@ -162,6 +162,46 @@ func buildMelodyContour(h []byte, prog theory.ChordProgression, motifDegrees []i
 	return contour
 }
 
+// withinLeap returns true if chromatic distance (with octave wrap) between a and b is <= maxSemitones.
+func withinLeap(noteA, noteB string, maxSemitones int) bool {
+	mA, errA := theory.NoteToMIDI(noteA + "4")
+	mB, errB := theory.NoteToMIDI(noteB + "4")
+	if errA != nil || errB != nil {
+		return true
+	}
+	dist := mA - mB
+	if dist < 0 {
+		dist = -dist
+	}
+	if dist > 6 {
+		dist = 12 - dist
+	}
+	return dist <= maxSemitones
+}
+
+// resolveTargetNote prefers character tone → 7th → 3rd → closestChordTone.
+func resolveTargetNote(chordTones, scaleNotes []string, degree int, key theory.Key) string {
+	if len(scaleNotes) == 0 || len(chordTones) == 0 {
+		if len(chordTones) > 0 {
+			return chordTones[0]
+		}
+		return ""
+	}
+	base := scaleNotes[normalizeDegree(degree, len(scaleNotes))]
+	charDeg := characterDegree(key)
+	candidates := []string{
+		scaleNotes[normalizeDegree(charDeg, len(scaleNotes))],
+		scaleNotes[normalizeDegree(charDeg+2, len(scaleNotes))],
+		chordTones[1%len(chordTones)],
+	}
+	for _, c := range candidates {
+		if withinLeap(c, base, 4) {
+			return c
+		}
+	}
+	return closestChordTone(chordTones, scaleNotes, degree)
+}
+
 // OfflineTemplate is the public version of offlineTemplate for use by service layer.
 func OfflineTemplate(patternType string, musicCtx MusicContext) *schema.PatternSpec {
 	return offlineTemplate(patternType, musicCtx)
@@ -518,10 +558,10 @@ func applyMelodyOfflineStyle(style string, steps []schema.StepSpec, prog theory.
 			}
 			notes := chordNotesOrRoot(chord)
 			n := len(notes)
-			steps[base+0] = schema.StepSpec{Active: true, Note: melodyNote(notes[0], "5"), Accent: true, Legato: true}
-			steps[base+4] = schema.StepSpec{Active: true, Note: melodyNote(notes[1%n], "5"), Staccato: true}
-			steps[base+8] = schema.StepSpec{Active: true, Note: melodyNote(notes[2%n], "5"), Legato: true}
-			steps[base+12] = schema.StepSpec{Active: true, Note: melodyNote(notes[0], "5"), Ghost: true}
+			steps[base+0] = schema.StepSpec{Active: true, Note: melodyNote(notes[0], "5", false), Accent: true, Legato: true}
+			steps[base+4] = schema.StepSpec{Active: true, Note: melodyNote(notes[1%n], "5", false), Staccato: true}
+			steps[base+8] = schema.StepSpec{Active: true, Note: melodyNote(notes[2%n], "5", false), Legato: true}
+			steps[base+12] = schema.StepSpec{Active: true, Note: melodyNote(notes[0], "5", false), Ghost: true}
 		}
 	default:
 		mixGateArticulation(steps, h)
@@ -880,20 +920,20 @@ func buildMelodyBar(steps []schema.StepSpec, base, chordIdx int, chord theory.Pr
 
 	degree := motifDegrees[chordIdx%len(motifDegrees)]
 	target := closestChordTone(chordTones, scaleNotes, degree)
-	targetNote := melodyNote(target, "5")
+	targetNote := melodyNote(target, "5", false)
 
-	pickup := melodyNote(approachNote(target, key), "5")
+	pickup := melodyNote(approachNote(target, key), "5", false)
 	charDeg := characterDegree(key)
-	charNote := melodyNote(scaleNotes[normalizeDegree(charDeg, len(scaleNotes))], "5")
-	echoNote := melodyNote(scaleNotes[normalizeDegree(degree+2, len(scaleNotes))], "5")
-	highNote := melodyNote(target, "6")
+	charNote := melodyNote(scaleNotes[normalizeDegree(charDeg, len(scaleNotes))], "5", false)
+	echoNote := melodyNote(scaleNotes[normalizeDegree(degree+2, len(scaleNotes))], "5", false)
+	highNote := melodyNote(target, "6", false)
 
 	switch chordIdx {
 	case 0: // Statement: sparse, held note establishes the phrase identity
 		steps[base+0] = schema.StepSpec{Active: true, Note: targetNote, Accent: true, Legato: true}
 		if h[(base+2)%32]%3 != 0 {
 			answerDeg := normalizeDegree(degree+4, len(scaleNotes))
-			steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[answerDeg], "5"), Staccato: true}
+			steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[answerDeg], "5", false), Staccato: true}
 		}
 		steps[base+5] = schema.StepSpec{Active: true, Note: targetNote, Ghost: true}
 		if h[(base+9)%32]%2 == 0 {
@@ -908,7 +948,7 @@ func buildMelodyBar(steps []schema.StepSpec, base, chordIdx int, chord theory.Pr
 		if h[(base+6)%32]%2 == 0 {
 			steps[base+6] = schema.StepSpec{Active: true, Note: targetNote, Ghost: true}
 		}
-		steps[base+8] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree+5, len(scaleNotes))], "5"), Staccato: true}
+		steps[base+8] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree+5, len(scaleNotes))], "5", false), Staccato: true}
 		if h[(base+12)%32]%3 != 0 {
 			steps[base+12] = schema.StepSpec{Active: true, Note: targetNote, Ghost: true}
 		}
@@ -916,7 +956,7 @@ func buildMelodyBar(steps []schema.StepSpec, base, chordIdx int, chord theory.Pr
 
 	case 2: // Tension: dense, modal character note at peak, syncopated off-beats
 		steps[base+0] = schema.StepSpec{Active: true, Note: charNote, Accent: true}
-		steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(charDeg+1, len(scaleNotes))], "5"), Staccato: true}
+		steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(charDeg+1, len(scaleNotes))], "5", false), Staccato: true}
 		steps[base+4] = schema.StepSpec{Active: true, Note: targetNote, Ghost: true}
 		if h[(base+5)%32]%2 == 0 {
 			steps[base+5] = schema.StepSpec{Active: true, Note: charNote, Staccato: true}
@@ -924,27 +964,32 @@ func buildMelodyBar(steps []schema.StepSpec, base, chordIdx int, chord theory.Pr
 		steps[base+7] = schema.StepSpec{Active: true, Note: highNote, Staccato: true}
 		steps[base+9] = schema.StepSpec{Active: true, Note: charNote, Ghost: true}
 		if h[(base+11)%32]%2 == 0 {
-			steps[base+11] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(charDeg-1, len(scaleNotes))], "5"), Staccato: true}
+			steps[base+11] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(charDeg-1, len(scaleNotes))], "5", false), Staccato: true}
 		}
 		steps[base+13] = schema.StepSpec{Active: true, Note: targetNote, Staccato: true}
 
 	case 3: // Resolution: descend back home, exhale, closing gesture
 		steps[base+0] = schema.StepSpec{Active: true, Note: targetNote, Accent: true, Legato: true}
-		steps[base+3] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree-1, len(scaleNotes))], "5"), Staccato: true}
-		steps[base+7] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree-2, len(scaleNotes))], "4"), Ghost: true}
+		steps[base+3] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree-1, len(scaleNotes))], "5", false), Staccato: true}
+		steps[base+7] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree-2, len(scaleNotes))], "4", false), Ghost: true}
 		if h[(base+9)%32]%3 != 2 {
-			steps[base+9] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree-3, len(scaleNotes))], "4"), Staccato: true}
+			steps[base+9] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[normalizeDegree(degree-3, len(scaleNotes))], "4", false), Staccato: true}
 		}
 		steps[base+12] = schema.StepSpec{Active: true, Note: targetNote, Ghost: true}
 	}
 }
 
 // melodyNote returns noteName+preferredOct clamped to the valid melody range [60, 84].
-func melodyNote(noteName, preferredOct string) string {
-	note := noteName + preferredOct
+// When preferHigher is true and preferredOct is "5", the octave is raised to "6" first.
+func melodyNote(noteName, preferredOct string, preferHigher bool) string {
+	oct := preferredOct
+	if preferHigher && oct == "5" {
+		oct = "6"
+	}
+	note := noteName + oct
 	midi, err := theory.NoteToMIDI(note)
 	if err != nil {
-		return note
+		return noteName + preferredOct
 	}
 	if midi < 60 {
 		return noteName + "5"
@@ -964,29 +1009,29 @@ func buildMelodyPhraseSection(steps []schema.StepSpec, base, sectionIdx int, cho
 
 	degree := motifDegrees[sectionIdx%len(motifDegrees)]
 	target := closestChordTone(chordTones, scaleNotes, degree)
-	targetNote := melodyNote(target, "5")
+	targetNote := melodyNote(target, "5", false)
 
 	switch sectionIdx % 4 {
 	case 0:
 		steps[base] = schema.StepSpec{Active: true, Note: targetNote, Accent: true, Legato: true}
 		if h[base%32]%3 == 0 {
 			answerDeg := normalizeDegree(degree+4, len(scaleNotes))
-			steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[answerDeg], "5"), Staccato: true}
+			steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[answerDeg], "5", false), Staccato: true}
 		}
 	case 1:
 		pickup := approachNote(target, key)
-		steps[base] = schema.StepSpec{Active: true, Note: melodyNote(pickup, "5"), Ghost: true, Staccato: true}
+		steps[base] = schema.StepSpec{Active: true, Note: melodyNote(pickup, "5", false), Ghost: true, Staccato: true}
 		steps[base+1] = schema.StepSpec{Active: true, Note: targetNote, Accent: true, Legato: true}
 		if h[(base+3)%32]%2 == 0 {
 			echoDeg := normalizeDegree(degree+2, len(scaleNotes))
-			steps[base+3] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[echoDeg], "5"), Staccato: true}
+			steps[base+3] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[echoDeg], "5", false), Staccato: true}
 		}
 	case 2:
 		charDeg := characterDegree(key)
 		charName := scaleNotes[normalizeDegree(charDeg, len(scaleNotes))]
-		steps[base] = schema.StepSpec{Active: true, Note: melodyNote(charName, "5"), Accent: true}
+		steps[base] = schema.StepSpec{Active: true, Note: melodyNote(charName, "5", false), Accent: true}
 		tensionDeg := normalizeDegree(charDeg+1, len(scaleNotes))
-		steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[tensionDeg], "5"), Staccato: true}
+		steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[tensionDeg], "5", false), Staccato: true}
 		if h[(base+3)%32]%2 == 0 {
 			steps[base+3] = schema.StepSpec{Active: true, Note: targetNote, Ghost: true}
 		}
@@ -994,7 +1039,7 @@ func buildMelodyPhraseSection(steps []schema.StepSpec, base, sectionIdx int, cho
 		steps[base] = schema.StepSpec{Active: true, Note: targetNote, Accent: true, Legato: true}
 		if h[(base+2)%32]%3 != 2 {
 			descDeg := normalizeDegree(degree-1, len(scaleNotes))
-			steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[descDeg], "4"), Staccato: true}
+			steps[base+2] = schema.StepSpec{Active: true, Note: melodyNote(scaleNotes[descDeg], "4", false), Staccato: true}
 		}
 	}
 }
