@@ -933,6 +933,48 @@ func TestResolveTargetNote_ReturnsValidNote(t *testing.T) {
 	}
 }
 
+func TestBuildMelodyFromContourBasicStructure(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "fill-test")
+	scaleNotes, _ := theory.ScaleNotes("A", "minor_natural")
+	h := seedHash("fill-test" + "A" + "minor_natural" + "melody")
+	motif := buildHypnoticMotif(h, 4, scaleNotes)
+	contour := buildMelodyContour(h, prog, motif, scaleNotes, key)
+
+	steps := make([]schema.StepSpec, motifSteps)
+	buildMelodyFromContour(steps, contour, prog, scaleNotes, key, h)
+
+	active := 0
+	for _, s := range steps {
+		if s.Active {
+			active++
+		}
+	}
+	if active == 0 {
+		t.Fatal("expected active steps after fill pass")
+	}
+
+	for i, s := range steps {
+		if !s.Active {
+			continue
+		}
+		midi, err := theory.NoteToMIDI(s.Note)
+		if err != nil {
+			t.Errorf("step %d: invalid note %q: %v", i, s.Note, err)
+			continue
+		}
+		if midi < 60 || midi > 84 {
+			t.Errorf("step %d: note %q MIDI=%d outside [60,84]", i, s.Note, midi)
+		}
+	}
+
+	for i := stepsPerSection*3 + 1; i < motifSteps; i++ {
+		if steps[i].Active && steps[i].Accent {
+			t.Errorf("resolution section step %d has unexpected Accent", i)
+		}
+	}
+}
+
 func TestMelodyNotePreferHigher(t *testing.T) {
 	noteHigh := melodyNote("C", "5", true)
 	midiHigh, err := theory.NoteToMIDI(noteHigh)

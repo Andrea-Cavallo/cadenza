@@ -202,6 +202,126 @@ func resolveTargetNote(chordTones, scaleNotes []string, degree int, key theory.K
 	return closestChordTone(chordTones, scaleNotes, degree)
 }
 
+// applyContourArticulation sets articulation on a target step based on ContourType and position.
+func applyContourArticulation(s *schema.StepSpec, ct ContourType, pos int) {
+	switch ct {
+	case ContourArch:
+		if pos >= 7 && pos <= 9 {
+			s.Accent = true
+			s.Legato = true
+		} else if pos > 9 {
+			s.Staccato = true
+		}
+	case ContourQuestionAnswer:
+		if pos <= 6 {
+			s.Staccato = true
+		} else {
+			s.Accent = true
+			s.Legato = true
+		}
+	case ContourTensionHold:
+		if pos < 8 {
+			s.Legato = true
+		} else {
+			s.Accent = true
+		}
+	case ContourDescRelease:
+		if pos == 0 {
+			s.Accent = true
+			s.Legato = true
+		} else {
+			s.Staccato = true
+		}
+	}
+}
+
+func fillMelodySection(steps []schema.StepSpec, base int, sec SectionContour, chordTones, scaleNotes []string, key theory.Key, h []byte) {
+	target := resolveTargetNote(chordTones, scaleNotes, sec.TargetDegree, key)
+
+	prevMIDI := -1
+	leapDebt := 0
+
+	for step := 0; step < stepsPerSection; step++ {
+		intent := sec.Intentions[step]
+		if !intent.Active {
+			continue
+		}
+
+		var noteName string
+		switch intent.Role {
+		case rolePickup:
+			noteName = approachNote(target, key)
+		case roleEcho:
+			echoDeg := normalizeDegree(sec.TargetDegree+1, len(scaleNotes))
+			if h[(base+step)%32]%2 == 0 {
+				echoDeg = normalizeDegree(sec.TargetDegree-1, len(scaleNotes))
+			}
+			if len(scaleNotes) > 0 {
+				noteName = scaleNotes[echoDeg]
+			} else {
+				noteName = target
+			}
+		case roleFill:
+			fillDeg := normalizeDegree(sec.TargetDegree+2, len(scaleNotes))
+			if len(scaleNotes) > 0 {
+				noteName = scaleNotes[fillDeg]
+			} else {
+				noteName = target
+			}
+		default:
+			noteName = target
+		}
+
+		preferHigh := intent.PreferHigh
+		if leapDebt != 0 && intent.Role == roleTarget {
+			preferHigh = leapDebt > 0
+			leapDebt = 0
+		}
+
+		note := melodyNote(noteName, "5", preferHigh)
+
+		s := schema.StepSpec{Active: true, Note: note}
+		switch intent.Role {
+		case rolePickup:
+			s.Ghost = true
+			s.Staccato = true
+		case roleEcho:
+			s.Ghost = true
+		case roleFill:
+			s.Staccato = true
+		default:
+			applyContourArticulation(&s, sec.Type, step)
+		}
+		steps[base+step] = s
+
+		currMIDI, err := theory.NoteToMIDI(note)
+		if err == nil {
+			if prevMIDI >= 0 {
+				leap := currMIDI - prevMIDI
+				if leap > 5 {
+					leapDebt = -1
+				} else if leap < -5 {
+					leapDebt = +1
+				} else {
+					leapDebt = 0
+				}
+			}
+			prevMIDI = currMIDI
+		}
+	}
+}
+
+func buildMelodyFromContour(steps []schema.StepSpec, contour MelodyContour, prog theory.ChordProgression, scaleNotes []string, key theory.Key, h []byte) {
+	for i, chord := range prog.Chords {
+		base := i * stepsPerSection
+		chordTones, _ := theory.ChordNotes(chord.Root, chord.Quality)
+		if len(chordTones) == 0 {
+			chordTones = []string{chord.Root}
+		}
+		fillMelodySection(steps, base, contour.Sections[i], chordTones, scaleNotes, key, h)
+	}
+}
+
 // OfflineTemplate is the public version of offlineTemplate for use by service layer.
 func OfflineTemplate(patternType string, musicCtx MusicContext) *schema.PatternSpec {
 	return offlineTemplate(patternType, musicCtx)
