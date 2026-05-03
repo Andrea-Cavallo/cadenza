@@ -91,15 +91,15 @@ var questionAnswerRhythms = [3][stepsPerSection]byte{
 }
 
 var tensionHoldRhythms = [3][stepsPerSection]byte{
-	{1, 0, 1, 0, 1, 3, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0}, // V0: 8 attivi
-	{1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 3, 0, 1, 0, 1, 0}, // V1: 8 attivi
-	{1, 3, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 3}, // V2: 9 attivi
+	{1, 0, 1, 0, 1, 2, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0}, // V0: 8 attivi (echo→pickup @5)
+	{1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 2, 0, 1, 0, 1, 0}, // V1: 8 attivi (echo→pickup @10)
+	{1, 2, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0}, // V2: 8 attivi (echo→pickup @1, trailing echo→rest @15)
 }
 
 var descReleaseRhythms = [3][stepsPerSection]byte{
-	{1, 0, 0, 1, 0, 1, 0, 3, 0, 0, 1, 0, 3, 0, 0, 0}, // V0: 6 attivi
-	{1, 0, 1, 0, 0, 1, 0, 0, 3, 0, 0, 1, 0, 3, 0, 0}, // V1: 6 attivi
-	{1, 0, 0, 0, 1, 0, 1, 0, 0, 3, 0, 0, 1, 0, 0, 3}, // V2: 6 attivi
+	{1, 0, 0, 1, 0, 1, 0, 2, 0, 0, 1, 0, 3, 0, 0, 0}, // V0: 6 attivi (echo→pickup @7)
+	{1, 0, 1, 0, 0, 1, 0, 0, 2, 0, 0, 1, 0, 3, 0, 0}, // V1: 6 attivi (echo→pickup @8)
+	{1, 0, 0, 0, 1, 0, 1, 0, 0, 2, 0, 0, 1, 0, 0, 3}, // V2: 6 attivi (echo→pickup @9)
 }
 
 var rhythmsByContour = map[ContourType][3][stepsPerSection]byte{
@@ -680,7 +680,7 @@ func applyMelodyOfflineStyle(style string, steps []schema.StepSpec, prog theory.
 }
 
 func applyPassingNotes(patternType string, steps []schema.StepSpec, prog theory.ChordProgression, key theory.Key, h []byte) {
-	maxActive := map[string]int{"bassline": 13 * (len(steps) / 16), "melody": 10 * (len(steps) / 16)}[patternType]
+	maxActive := map[string]int{"bassline": 13 * (len(steps) / 16), "melody": 8 * (len(steps) / 16)}[patternType]
 	if maxActive == 0 {
 		return
 	}

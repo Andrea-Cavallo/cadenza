@@ -1092,3 +1092,124 @@ func assertGateVariation(t *testing.T, spec *schema.PatternSpec) {
 		t.Fatalf("%s should mix legato and staccato gates, legato=%v staccato=%v", spec.PatternType, hasLegato, hasStaccato)
 	}
 }
+
+func TestMelodyPhraseQuality(t *testing.T) {
+	type keyCase struct{ root, scale, mode string }
+	cases := []keyCase{
+		{"A", "minor_natural", "minor"},
+		{"D", "dorian", "dorian"},
+		{"G", "mixolydian", "mixolydian"},
+		{"E", "phrygian", "phrygian"},
+	}
+	for _, kc := range cases {
+		t.Run(kc.root+"-"+kc.scale, func(t *testing.T) {
+			key := theory.Key{Root: kc.root, Scale: kc.scale, Mode: kc.mode}
+			prog := theory.SelectProgression(kc.root, kc.scale, "quality-seed")
+			for seed := 1; seed <= 10; seed++ {
+				ctx := MusicContext{
+					BPM:              122,
+					Key:              key,
+					ChordProgression: prog,
+					VariationSeed:    fmt.Sprintf("q-seed-%d", seed),
+					Bars:             16,
+				}
+				melodySpec := offlineTemplate("melody", ctx)
+				arpSpec := offlineTemplate("arpeggio", ctx)
+				if melodySpec == nil || arpSpec == nil {
+					t.Fatalf("seed %d: nil spec", seed)
+				}
+				score := ScoreMelodyPhrase(melodySpec, arpSpec.Motif.Steps, prog, key)
+				if score.PhraseScore < 0.65 {
+					t.Errorf("%s seed %d: PhraseScore=%.3f < 0.65 (rest=%.2f pickup=%.2f contour=%.2f chord=%.2f reg=%.2f)",
+						kc.root, seed, score.PhraseScore,
+						score.RestRatio, score.PickupPresence, score.ContourScore,
+						score.ChordToneStrength, score.RegisterSep)
+				}
+				if score.RestRatio < 0.50 || score.RestRatio > 0.75 {
+					t.Errorf("%s seed %d: RestRatio=%.3f outside [0.50, 0.75]", kc.root, seed, score.RestRatio)
+				}
+				if score.PickupPresence < 0.50 {
+					t.Errorf("%s seed %d: PickupPresence=%.3f < 0.50", kc.root, seed, score.PickupPresence)
+				}
+			}
+		})
+	}
+}
+
+func TestMelodyNoUnresolvedLeaps(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "leap-test")
+	for seed := 1; seed <= 20; seed++ {
+		ctx := MusicContext{
+			BPM:              122,
+			Key:              key,
+			ChordProgression: prog,
+			VariationSeed:    fmt.Sprintf("leap-seed-%d", seed),
+			Bars:             16,
+		}
+		spec := offlineTemplate("melody", ctx)
+		if spec == nil {
+			t.Fatalf("seed %d: nil spec", seed)
+		}
+		numSections := len(spec.Motif.Steps) / stepsPerSection
+		for sec := 0; sec < numSections; sec++ {
+			base := sec * stepsPerSection
+			if hasDoubleLeap(spec.Motif.Steps, base, base+stepsPerSection) {
+				t.Errorf("seed %d section %d: double same-direction leap > 5 semitones", seed, sec)
+			}
+		}
+	}
+}
+
+func TestListeningFixturesMelody(t *testing.T) {
+	type Entry struct {
+		Seed        string `json:"seed"`
+		Key         string `json:"key"`
+		Fingerprint string `json:"fingerprint"`
+	}
+
+	baselineRaw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "listening", "melody_before_fingerprints.json"))
+	if err != nil {
+		t.Skipf("baseline not found, skipping: %v", err)
+	}
+	var baseline []Entry
+	if err := json.Unmarshal(baselineRaw, &baseline); err != nil {
+		t.Fatalf("parse baseline: %v", err)
+	}
+
+	baselineMap := make(map[string]string, len(baseline))
+	for _, e := range baseline {
+		baselineMap[e.Key+"|"+e.Seed] = e.Fingerprint
+	}
+
+	seeds := []string{"fix-1", "fix-2", "fix-3"}
+	keys := []struct{ root, scale, mode string }{
+		{"A", "minor_natural", "minor"},
+		{"D", "dorian", "dorian"},
+	}
+
+	changed := 0
+	for _, kc := range keys {
+		key := theory.Key{Root: kc.root, Scale: kc.scale, Mode: kc.mode}
+		for _, seed := range seeds {
+			prog := theory.SelectProgression(kc.root, kc.scale, seed)
+			ctx := MusicContext{
+				BPM: 122, Key: key, ChordProgression: prog,
+				VariationSeed: seed, Bars: 16,
+			}
+			spec := offlineTemplate("melody", ctx)
+			if spec == nil {
+				t.Fatalf("%s %s: nil spec", kc.root, seed)
+			}
+			newFP := musicalFingerprint(spec.Motif.Steps)
+			mapKey := kc.root + "-" + kc.scale + "|" + seed
+			if oldFP, ok := baselineMap[mapKey]; ok && oldFP != newFP {
+				changed++
+			}
+		}
+	}
+	if changed == 0 {
+		t.Error("no melody fingerprints changed after refactor — phrase builder may not be wired correctly")
+	}
+	t.Logf("melody fingerprints changed: %d / %d", changed, len(seeds)*len(keys))
+}
