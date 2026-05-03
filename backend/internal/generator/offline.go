@@ -79,27 +79,27 @@ type MelodyContour struct {
 // Template ritmici: 0=rest, 1=target, 2=pickup, 3=echo, 4=fill.
 // 3 varianti per ContourType, scelte via seed hash.
 var archRhythms = [3][stepsPerSection]byte{
-	{1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 3, 0, 2}, // V0: 7 attivi
+	{1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 3, 0, 2}, // V0: 8 attivi
 	{1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 3, 0, 0}, // V1: 7 attivi
 	{1, 2, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 3, 0}, // V2: 7 attivi
 }
 
 var questionAnswerRhythms = [3][stepsPerSection]byte{
-	{1, 2, 0, 1, 0, 0, 3, 0, 0, 1, 0, 1, 0, 3, 0, 2}, // V0: 7 attivi
-	{1, 0, 2, 1, 0, 3, 0, 0, 0, 1, 2, 0, 1, 0, 3, 0}, // V1: 7 attivi
-	{2, 1, 0, 0, 1, 0, 3, 0, 0, 0, 1, 0, 2, 1, 0, 0}, // V2: 6 attivi
+	{1, 2, 0, 1, 0, 0, 3, 0, 0, 1, 0, 1, 0, 3, 0, 2}, // V0: 8 attivi
+	{1, 0, 2, 1, 0, 3, 0, 0, 0, 1, 2, 0, 1, 0, 3, 0}, // V1: 8 attivi
+	{2, 1, 0, 0, 1, 0, 3, 0, 0, 0, 1, 0, 2, 1, 0, 0}, // V2: 7 attivi
 }
 
 var tensionHoldRhythms = [3][stepsPerSection]byte{
 	{1, 0, 1, 0, 1, 3, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0}, // V0: 8 attivi
-	{1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 3, 0, 1, 0, 1, 0}, // V1: 9 attivi
+	{1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 3, 0, 1, 0, 1, 0}, // V1: 8 attivi
 	{1, 3, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 3}, // V2: 9 attivi
 }
 
 var descReleaseRhythms = [3][stepsPerSection]byte{
-	{1, 0, 0, 1, 0, 1, 0, 3, 0, 0, 1, 0, 3, 0, 0, 0}, // V0: 5 attivi
-	{1, 0, 1, 0, 0, 1, 0, 0, 3, 0, 0, 1, 0, 3, 0, 0}, // V1: 5 attivi
-	{1, 0, 0, 0, 1, 0, 1, 0, 0, 3, 0, 0, 1, 0, 0, 3}, // V2: 5 attivi
+	{1, 0, 0, 1, 0, 1, 0, 3, 0, 0, 1, 0, 3, 0, 0, 0}, // V0: 6 attivi
+	{1, 0, 1, 0, 0, 1, 0, 0, 3, 0, 0, 1, 0, 3, 0, 0}, // V1: 6 attivi
+	{1, 0, 0, 0, 1, 0, 1, 0, 0, 3, 0, 0, 1, 0, 0, 3}, // V2: 6 attivi
 }
 
 var rhythmsByContour = map[ContourType][3][stepsPerSection]byte{
