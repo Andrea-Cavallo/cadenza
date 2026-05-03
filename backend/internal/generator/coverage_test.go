@@ -788,6 +788,31 @@ func TestOfflineRhythmicFigureCountAndPassingNotes(t *testing.T) {
 	}
 }
 
+func TestBuildHypnoticMotifNoDoubleLeap(t *testing.T) {
+	scaleNotes := []string{"A", "B", "C", "D", "E", "F", "G"}
+	for seed := 1; seed <= 50; seed++ {
+		h := seedHash(fmt.Sprintf("guard-seed-%d", seed))
+		motif := buildHypnoticMotif(h, 5, scaleNotes)
+		for i := 1; i < len(motif)-1; i++ {
+			d1 := motif[i] - motif[i-1]
+			d2 := motif[i+1] - motif[i]
+			abs1 := d1
+			if abs1 < 0 {
+				abs1 = -abs1
+			}
+			abs2 := d2
+			if abs2 < 0 {
+				abs2 = -abs2
+			}
+			sameDir := (d1 > 0 && d2 > 0) || (d1 < 0 && d2 < 0)
+			if sameDir && abs1 >= 3 && abs2 >= 3 {
+				t.Errorf("seed %d: double same-direction leap at [%d,%d,%d]: intervals %d,%d",
+					seed, i-1, i, i+1, d1, d2)
+			}
+		}
+	}
+}
+
 func TestContourTemplatesHaveCorrectDensity(t *testing.T) {
 	type densityCase struct {
 		name                 ContourType

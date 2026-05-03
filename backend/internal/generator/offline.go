@@ -971,6 +971,30 @@ func buildHypnoticMotif(h []byte, length int, scaleNotes []string) []int {
 	wideIntervals := []int{3, 4, 5, -3, -4, -2}
 	for i := 1; i < length; i++ {
 		interval := wideIntervals[int(h[15+i])%len(wideIntervals)]
+		if i > 1 {
+			// d1 is the stored difference between motif[i-1] and motif[i-2].
+			d1 := motif[i-1] - motif[i-2]
+			absD1 := d1
+			if absD1 < 0 {
+				absD1 = -absD1
+			}
+			// d2 would be (motif[i-1] + interval) - motif[i-1] = interval, but after
+			// modulo wrap the stored difference is what the test measures.
+			// Compute the candidate stored difference: next - motif[i-1].
+			candidate := (motif[i-1] + interval) % numDegrees
+			if candidate < 0 {
+				candidate += numDegrees
+			}
+			d2 := candidate - motif[i-1]
+			absD2 := d2
+			if absD2 < 0 {
+				absD2 = -absD2
+			}
+			sameDir := (d1 > 0 && d2 > 0) || (d1 < 0 && d2 < 0)
+			if sameDir && absD1 >= 3 && absD2 >= 3 {
+				interval = -interval
+			}
+		}
 		next := (motif[i-1] + interval) % numDegrees
 		if next < 0 {
 			next += numDegrees
