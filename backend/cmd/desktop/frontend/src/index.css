@@ -6,8 +6,8 @@
   --border: #1A2230;
   --border-strong: #263448;
   --fg: #F6FBFF;
-  --fg-dim: #9AA8B7;
-  --fg-muted: #5F6E7E;
+  --fg-dim: #B6C4D3;
+  --fg-muted: #7B8A9B;
   --accent: #00E0FF;
   --accent-ink: #001217;
   --success: #01FF95;
@@ -169,50 +169,12 @@ button {
   gap: 10px;
 }
 
-.accent-switch {
-  display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-
-.accent-switch button,
 .icon-btn {
   height: 26px;
   border: 0;
   background: transparent;
   color: var(--fg-dim);
   cursor: pointer;
-}
-
-.accent-switch button {
-  width: 26px;
-  display: grid;
-  place-items: center;
-}
-
-.accent-switch button.on {
-  background: var(--bg-surface);
-}
-
-.swatch {
-  width: 12px;
-  height: 12px;
-  display: block;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-}
-
-.swatch.cyan {
-  background: #00E0FF;
-}
-
-.swatch.lime {
-  background: #01FF95;
-}
-
-.swatch.amber {
-  background: #FFB000;
 }
 
 .icon-btn.text {
@@ -225,8 +187,7 @@ button {
   text-transform: uppercase;
 }
 
-.icon-btn:hover,
-.accent-switch button:hover {
+.icon-btn:hover {
   color: var(--fg);
   border-color: var(--border-strong);
 }
@@ -341,10 +302,9 @@ button {
 }
 
 .roll-svg {
-  width: 100%;
-  height: 100%;
   min-height: 220px;
   display: block;
+  touch-action: none;
 }
 
 .real-roll {
@@ -353,7 +313,7 @@ button {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 44px 34px minmax(0, 1fr) 52px;
+  grid-template-rows: 44px 34px minmax(0, 1fr) 64px;
   background: rgba(5, 7, 11, 0.72);
 }
 
@@ -391,6 +351,31 @@ button {
   gap: 8px;
   overflow-x: auto;
   padding: 8px 14px 0;
+}
+
+.roll-zoom {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.roll-zoom button {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.roll-zoom button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .chord-pill {
@@ -443,6 +428,39 @@ button {
   background: var(--bg-surface);
 }
 
+.active-track-copy {
+  align-self: center;
+  margin-left: 12px;
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.roll-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto hidden;
+}
+
+.roll-note rect:first-child {
+  cursor: grab;
+  stroke: transparent;
+  stroke-width: 1;
+}
+
+.roll-note.selected rect:first-child {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 7px rgba(0, 224, 255, 0.38));
+}
+
+.note-edge {
+  fill: rgba(0, 0, 0, 0);
+  cursor: ew-resize;
+  pointer-events: none;
+}
+
 .preview-actions {
   display: flex;
   align-items: center;
@@ -451,6 +469,62 @@ button {
   padding: 8px 14px;
   border-top: 1px solid var(--border);
   background: rgba(5, 7, 11, 0.94);
+}
+
+.editor-actions {
+  justify-content: space-between;
+}
+
+.note-inspector {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.note-inspector strong {
+  color: var(--accent);
+}
+
+.note-inspector label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.note-inspector input[type="number"] {
+  width: 48px;
+  height: 26px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 6px;
+}
+
+.note-inspector input[type="range"] {
+  width: 104px;
+  accent-color: var(--accent);
+}
+
+.mini-check input {
+  accent-color: var(--accent);
+}
+
+.inspector-empty {
+  color: var(--fg-muted);
+  opacity: 0.7;
+}
+
+.btn.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .preview-actions .btn {
@@ -1097,6 +1171,14 @@ select:disabled {
 
 .provider-model {
   margin-top: 2px;
+}
+
+.secondary-control {
+  opacity: 0.92;
+}
+
+.secondary-control .sb-label {
+  color: var(--fg-muted);
 }
 
 .provider-actions-grid {

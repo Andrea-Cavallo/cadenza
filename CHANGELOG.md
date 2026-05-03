@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Bass case 3 octave out-of-range**: `root + "1"` produced MIDI values below 33 for roots C–G# (e.g. F1=29); changed to `root + "2"` so all bass notes stay in the validator range [33, 55].
+- **TestSingleGenerator_GenerateBranches subtests**: the `% 7` hash mapping added for the break-pattern removal caused case 3 to be selected for F-chord sections, making the offline template fail validation and breaking the MockProvider fallback tests.
+- **Arp gate lengths**: `arp_epic.go` NormalGate was 0.88 (near-legato), making arpeggios sound like held chords; reduced to 0.55 with matching AccentGate 0.65.
+- **Arp articulation uniformity**: all arp steps were set to `Legato: true`, creating a wall of sustained notes instead of discrete arpeggio triggers; replaced with staccato/normal/accent mix per pattern.
+- **Bass density overrun**: removing the forced silent section-3 pattern allowed patterns 0–6 which can add 3–4 active notes per section, pushing total active beyond the validator max of 13; added `ensureBassMaxDensity` to clamp ghost and non-accent steps.
+- **Bass last-section silence**: section 3 was always forced to the silent/break pattern (pattern 7); now allows any pattern 0–6 for musical continuity, with optional `% 4` fallback below 120 BPM for a calmer release.
+- **Piano roll 1-bar display**: `buildTrackPreview` was only showing 1 bar (16 steps) instead of all 16 bars (256 steps); now expands the motif across all bars so the full arrangement is visible.
+
+### Added
+- **Section-aware melody phrase generation**: replaced the uniform legato-stream loop with a 4-role phrase model: section 0 = statement (1–2 held notes, lots of space), section 1 = call (pickup → landing → optional echo), section 2 = tension (character/modal note + syncopated off-beat), section 3 = resolution (descend home, staccato end). Produces recognizable musical phrases instead of a block of equal-length notes.
+- **`buildMelodyPhraseSection` helper**: implements per-section note selection using `closestChordTone`, `approachNote`, and `characterDegree` for musically coherent articulation and contour.
+- **`melodyNote` helper**: clamps any bare note name + octave to the valid melody range [60, 84]; always safe to call, never produces out-of-range MIDI.
+- **Fixed accent color switcher removal**: removed the cyan/lime/amber accent toggle from TitleBar, leaving cyan as the sole fixed visual identity; removed `AccentName` type, `ACCENT_MAP`, accent state and associated `useEffect` from App.tsx, and all `.accent-switch` / `.swatch` CSS.
+
 ### Added
 - Wails v2 desktop app (`backend/cmd/desktop/`) with a standalone `cadenza-desktop.exe` binding the Go MIDI engine directly to a React frontend, no HTTP layer.
 - `AppService` methods exposed to Wails (`Generate`, `GetProviders`, `GetModels`, `GetConfig`, `OpenOutputFolder`) plus progress events for the desktop generation log.
@@ -22,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Desktop log drawer now shows step-by-step generation progress (`provider`, `plan`, `generate`, `render`, `write`) and operational error messages with the next button or setup action to use.
 - Desktop packaging now includes cross-platform distribution scripts, a multi-OS GitHub Actions matrix, Windows ZIP content validation, and the Cadenza icon for Wails desktop binaries.
 - Desktop sidebar now uses a minimal producer workflow: key, BPM, bars, provider, and Generate only; frontend genre presets and the Advanced drawer were removed.
+- Desktop piano roll is now editable after generation: notes can be dragged on the 1/16 grid, resized, deleted, adjusted for velocity/accent/ghost, zoomed across long timelines, and exported as fresh edited MIDI files.
+- Desktop theme is now a single cyan identity: leftover track colors were neutralized, lime is reserved for success/ready states, amber for warning/setup states, and muted text contrast was raised for sidebar, log, and piano roll readability.
+- Desktop offline style is now a secondary `Offline flavor` control shown only for the Offline provider, backed by listening fixtures that assert `melodic`, `hypnotic`, `driving`, and `minimal` produce distinct musical fingerprints.
+- Desktop preset cleanup completed: no frontend preset structs, preset mappings, or desktop preset workflow remain; CLI presets are kept separate from the desktop UI.
 
 ### Fixed
 - Desktop generation now preflights selected providers before rendering, so missing API keys or unavailable Ollama produce clear UI errors instead of silently falling back to offline output.

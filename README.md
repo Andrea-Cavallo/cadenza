@@ -158,6 +158,7 @@ If you override the output directory, the logs follow that folder. If you config
 
 The desktop app is a Wails v2 shell around the same Go engine. It runs as a native Windows/macOS/Linux app and calls Go methods directly from the React UI; there is no HTTP service between the GUI and the generator.
 The provider panel checks whether API keys are configured, whether Ollama is installed and running, and which local Ollama models are available before generation starts.
+The current beta desktop workflow is intentionally minimal: choose provider, key/mode, BPM, bars, then generate. Genre presets are not part of the desktop sidebar; they remain a CLI workflow only. When Offline is selected, a compact secondary `Offline flavor` control exposes `melodic`, `hypnotic`, `driving`, and `minimal` because those modes produce measurably different PatternSpecs.
 
 ```bash
 cd backend

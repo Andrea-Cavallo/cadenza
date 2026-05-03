@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Am 124 offline style separation",
+    "bpm": 124,
+    "key": "Am",
+    "seed": "style-seed",
+    "styles": ["melodic", "hypnotic", "driving", "minimal"],
+    "patternTypes": ["bassline", "arpeggio", "melody"],
+    "expected": {
+      "bassline": "each style has a distinct rhythm/articulation fingerprint",
+      "arpeggio": "driving is full-density, hypnotic is sustained, minimal is sparse",
+      "melody": "minimal is four sparse hits, driving is busier, melodic keeps phrase variation"
+    }
+  },
+  {
+    "name": "Dm Dorian 128 offline style separation",
+    "bpm": 128,
+    "key": "Dm-dorian",
+    "seed": "offline-style-fixture-dorian",
+    "styles": ["melodic", "hypnotic", "driving", "minimal"],
+    "patternTypes": ["bassline", "arpeggio", "melody"],
+    "expected": {
+      "bassline": "style changes survive modal key context",
+      "arpeggio": "style changes survive modal key context",
+      "melody": "style changes survive modal key context"
+    }
+  }
+]

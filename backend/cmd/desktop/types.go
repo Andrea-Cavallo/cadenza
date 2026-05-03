@@ -21,6 +21,15 @@ type GenerateResult struct {
 	Preview GenerationPreview `json:"preview"`
 }
 
+type ExportEditedRequest struct {
+	BPM     int               `json:"bpm"`
+	Preview GenerationPreview `json:"preview"`
+}
+
+type ExportEditedResult struct {
+	Files []string `json:"files"`
+}
+
 type GenerationPreview struct {
 	Bars        int            `json:"bars"`
 	StepsPerBar int            `json:"stepsPerBar"`
@@ -41,15 +50,17 @@ type TrackPreview struct {
 }
 
 type StepPreview struct {
-	Step     int    `json:"step"`
-	Note     string `json:"note"`
-	MIDI     int    `json:"midi"`
-	Active   bool   `json:"active"`
-	Accent   bool   `json:"accent"`
-	Ghost    bool   `json:"ghost"`
-	Slide    bool   `json:"slide"`
-	Legato   bool   `json:"legato"`
-	Staccato bool   `json:"staccato"`
+	Step          int    `json:"step"`
+	Note          string `json:"note"`
+	MIDI          int    `json:"midi"`
+	Active        bool   `json:"active"`
+	Accent        bool   `json:"accent"`
+	Ghost         bool   `json:"ghost"`
+	Slide         bool   `json:"slide"`
+	Legato        bool   `json:"legato"`
+	Staccato      bool   `json:"staccato"`
+	DurationSteps int    `json:"durationSteps"`
+	Velocity      int    `json:"velocity"`
 }
 
 type ModelInfo struct {

@@ -4,19 +4,12 @@ import { PianoRoll } from './components/PianoRoll'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
-import { AccentName, GenerationPreview, Params, ProviderStatus } from './types'
+import { GenerationPreview, Params, ProviderStatus } from './types'
 
 // @ts-ignore
 import * as AppService from '../wailsjs/go/main/AppService'
 
-const ACCENT_MAP: Record<AccentName, string> = {
-  cyan: '#00E0FF',
-  lime: '#01FF95',
-  amber: '#FFB000',
-}
-
 export default function App() {
-  const [accent, setAccent] = useState<AccentName>('cyan')
   const [params, setParams] = useState<Params>({
     bpm: 122,
     key: 'Am-dorian',
@@ -39,10 +32,6 @@ export default function App() {
   const [logOpen, setLogOpen] = useState(false)
   const [lastSeed, setLastSeed] = useState('')
   const [pinnedSeed, setPinnedSeed] = useState('')
-
-  useEffect(() => {
-    document.documentElement.style.setProperty('--accent', ACCENT_MAP[accent])
-  }, [accent])
 
   useEffect(() => {
     const last = log[log.length - 1] ?? ''
@@ -68,11 +57,43 @@ export default function App() {
     setKept(false)
   }
 
+  const updateDisplayPreview = (next: GenerationPreview) => {
+    if (abView === 'b' && previewAlt) {
+      setPreviewAlt(next)
+      return
+    }
+    setPreview(next)
+  }
+
+  const exportEditedPreview = async () => {
+    if (!displayPreview) {
+      setLog(lines => [...lines, 'Error: Nothing to export.', 'Action: Generate MIDI first, then edit the piano roll.'])
+      setLogOpen(true)
+      return
+    }
+    try {
+      setLog(lines => [...lines, '[write] exporting edited piano roll'])
+      const result = await AppService.ExportEditedPreview({ bpm: params.bpm, preview: displayPreview } as any)
+      if (abView === 'b') {
+        setFilesAlt(result.files)
+      } else {
+        setFiles(result.files)
+      }
+      setLog(lines => [...lines, `[write] exported ${result.files.length} edited MIDI file(s)`])
+    } catch (err) {
+      setLog(lines => [
+        ...lines,
+        'Error: Edited export failed.',
+        'Action: Check that the output folder is writable, then press Export edited again.',
+        `Details: ${err instanceof Error ? err.message : String(err)}`,
+      ])
+      setLogOpen(true)
+    }
+  }
+
   return (
     <div className="app-shell">
       <TitleBar
-        accent={accent}
-        onAccentChange={setAccent}
         provider={params.provider}
         status={status}
         running={running}
@@ -105,9 +126,10 @@ export default function App() {
               playing={running}
               preview={displayPreview}
               kept={kept}
+              onPreviewChange={updateDisplayPreview}
               onKeep={() => setKept(true)}
               onDiscard={discardCurrent}
-              onExportAll={() => AppService.OpenOutputFolder()}
+              onExportEdited={exportEditedPreview}
             />
 
             {!running && filesAlt.length > 0 && (

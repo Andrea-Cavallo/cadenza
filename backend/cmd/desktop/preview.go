@@ -59,30 +59,72 @@ func buildTrackPreviews(specs map[string]*schema.PatternSpec) []TrackPreview {
 }
 
 func buildTrackPreview(patternType string, spec *schema.PatternSpec) TrackPreview {
-	steps := make([]StepPreview, 0, len(spec.Motif.Steps))
-	for i, step := range spec.Motif.Steps {
-		midi := 0
-		if step.Active && step.Note != "" {
-			if value, err := theory.NoteToMIDI(step.Note); err == nil {
-				midi = value
-			}
-		}
-		steps = append(steps, StepPreview{
-			Step:     i,
-			Note:     step.Note,
-			MIDI:     midi,
-			Active:   step.Active,
-			Accent:   step.Accent,
-			Ghost:    step.Ghost,
-			Slide:    step.Slide,
-			Legato:   step.Legato,
-			Staccato: step.Staccato,
-		})
+	motif := spec.Motif.Steps
+	motifLen := len(motif)
+	if motifLen == 0 {
+		motifLen = 16
 	}
+	bars := spec.Meta.Bars
+	if bars <= 0 {
+		bars = 16
+	}
+
+	// Expand the motif across all bars so the piano roll shows the full arrangement.
+	// Each bar repeats the same motif (evolution is applied by the renderer; here we
+	// show the raw pattern repeated so the density and pitch content are clearly visible).
+	totalSteps := bars * motifLen
+	steps := make([]StepPreview, 0, totalSteps)
+
+	for bar := 0; bar < bars; bar++ {
+		for i, step := range motif {
+			midi := 0
+			if step.Active && step.Note != "" {
+				if value, err := theory.NoteToMIDI(step.Note); err == nil {
+					midi = value
+				}
+			}
+			steps = append(steps, StepPreview{
+				Step:          bar*motifLen + i,
+				Note:          step.Note,
+				MIDI:          midi,
+				Active:        step.Active,
+				Accent:        step.Accent,
+				Ghost:         step.Ghost,
+				Slide:         step.Slide,
+				Legato:        step.Legato,
+				Staccato:      step.Staccato,
+				DurationSteps: previewDurationSteps(step),
+				Velocity:      previewVelocity(step),
+			})
+		}
+	}
+
 	return TrackPreview{
 		PatternType: patternType,
 		Label:       previewLabel(patternType),
 		Steps:       steps,
+	}
+}
+
+func previewDurationSteps(step schema.StepSpec) int {
+	switch {
+	case step.Slide || step.Legato:
+		return 2
+	case step.Staccato:
+		return 1
+	default:
+		return 1
+	}
+}
+
+func previewVelocity(step schema.StepSpec) int {
+	switch {
+	case step.Ghost:
+		return 46
+	case step.Accent:
+		return 110
+	default:
+		return 84
 	}
 }
 

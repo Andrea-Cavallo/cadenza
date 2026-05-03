@@ -188,6 +188,58 @@ func TestBuildGenerationPreviewUsesPatternSpecs(t *testing.T) {
 	}
 }
 
+func TestExportEditedPreviewWritesEditedFiles(t *testing.T) {
+	app := NewApp()
+	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
+
+	result, err := app.ExportEditedPreview(ExportEditedRequest{
+		BPM: 122,
+		Preview: GenerationPreview{
+			Bars:        16,
+			StepsPerBar: 16,
+			Patterns: []TrackPreview{
+				{
+					PatternType: "bassline",
+					Label:       "Bass",
+					Steps: []StepPreview{
+						{Step: 0, Note: "A2", MIDI: 45, Active: true, Velocity: 92, DurationSteps: 2},
+						{Step: 4, Note: "C3", MIDI: 48, Active: true, Velocity: 110, DurationSteps: 1},
+					},
+				},
+				{
+					PatternType: "melody",
+					Label:       "Melody",
+					Steps: []StepPreview{
+						{Step: 8, Note: "A4", MIDI: 69, Active: true, Velocity: 84, DurationSteps: 4},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExportEditedPreview error: %v", err)
+	}
+	if len(result.Files) != 2 {
+		t.Fatalf("expected 2 edited files, got %d", len(result.Files))
+	}
+	for _, path := range result.Files {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected edited MIDI file %q: %v", path, err)
+		}
+	}
+}
+
+func TestExportEditedPreviewRejectsEmptyPreview(t *testing.T) {
+	app := NewApp()
+	app.outputDir = t.TempDir()
+	defer func() { _ = app.closeLogger() }()
+
+	if _, err := app.ExportEditedPreview(ExportEditedRequest{}); err == nil {
+		t.Fatal("expected empty preview error")
+	}
+}
+
 func TestGenerateRejectsMissingClaudeKeyBeforeFallback(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	app := NewApp()

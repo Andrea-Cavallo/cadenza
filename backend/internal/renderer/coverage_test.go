@@ -42,14 +42,15 @@ func TestFindNextActiveTick_AndResolveGate(t *testing.T) {
 		{Active: false},
 		{Active: true, Note: "E2"},
 	}
+	n := len(steps)
 
 	next := findNextActiveTick(steps, 0, 0, profile)
-	if next <= resolveTick(0, 0, profile) {
+	if next <= resolveTick(0, 0, n, profile) {
 		t.Fatalf("expected next active tick after current tick")
 	}
 
 	lastNext := findNextActiveTick(steps, 0, 2, profile)
-	if lastNext != resolveTick(1, 0, profile) {
+	if lastNext != resolveTick(1, 0, n, profile) {
 		t.Fatalf("expected last step to resolve to next bar downbeat, got %d", lastNext)
 	}
 
@@ -85,7 +86,7 @@ func TestSweepHelpers_CoverFallbacks(t *testing.T) {
 
 	events := filterSweepEvents(15, 16, "unknown", "seed", "melody", &profile, []schema.EvolutionStep{
 		{FromBar: 1, ToBar: 16, Action: "build", Intensity: 0.75},
-	})
+	}, 16)
 	if len(events) != profile.FilterSweep.Resolution {
 		t.Fatalf("expected %d sweep events, got %d", profile.FilterSweep.Resolution, len(events))
 	}

@@ -30,6 +30,15 @@ export interface GenerateResult {
   preview: GenerationPreview
 }
 
+export interface ExportEditedRequest {
+  bpm: number
+  preview: GenerationPreview
+}
+
+export interface ExportEditedResult {
+  files: string[]
+}
+
 export interface GenerationPreview {
   bars: number
   stepsPerBar: number
@@ -59,6 +68,8 @@ export interface StepPreview {
   slide: boolean
   legato: boolean
   staccato: boolean
+  durationSteps: number
+  velocity: number
 }
 
 export interface GeneratedFile {
@@ -85,4 +96,3 @@ export interface ProviderStatus {
   localModels: ModelInfo[]
 }
 
-export type AccentName = 'cyan' | 'lime' | 'amber'

@@ -13,6 +13,12 @@ const KEYS = [
 ]
 const BARS_OPTS = [16, 32, 64, 128]
 const PROVIDERS = ['offline', 'claude', 'ollama', 'openai', 'gemini']
+const OFFLINE_STYLES = [
+  { id: 'melodic', label: 'Melodic' },
+  { id: 'hypnotic', label: 'Hypnotic' },
+  { id: 'driving', label: 'Driving' },
+  { id: 'minimal', label: 'Minimal' },
+]
 
 const PROVIDER_KEY_NAMES: Record<string, string> = {
   claude: 'ANTHROPIC_API_KEY',
@@ -154,6 +160,21 @@ export function Sidebar({
                 >
                   {modelChoices.length === 0 && <option value="">No models available</option>}
                   {modelChoices.map(m => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
+                </select>
+              </label>
+            )}
+
+            {params.provider === 'offline' && (
+              <label className="sb-control provider-model secondary-control">
+                <span className="sb-label">Offline flavor</span>
+                <select
+                  value={params.style}
+                  onChange={e => setParams({ ...params, style: e.target.value })}
+                  disabled={running}
+                >
+                  {OFFLINE_STYLES.map(style => (
+                    <option key={style.id} value={style.id}>{style.label}</option>
+                  ))}
                 </select>
               </label>
             )}

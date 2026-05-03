@@ -87,7 +87,7 @@ func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProg
 
 	stepErrs, activeCount := validateMotif(spec, constraints)
 	errs = append(errs, stepErrs...)
-	errs = append(errs, validateDensity(activeCount, constraints, spec.PatternType)...)
+	errs = append(errs, validateDensity(activeCount, constraints, spec.PatternType, len(spec.Motif.Steps))...)
 	errs = append(errs, validateAntiLoop(spec)...)
 	errs = append(errs, validateEvolution(spec.Evolution)...)
 	errs = append(errs, v.validateOptionalChordCoherence(spec, prog)...)
@@ -104,7 +104,7 @@ func validateMeta(spec *PatternSpec, customBars int) []string {
 		errs = append(errs, fmt.Sprintf("bpm %.1f out of range [80, 150]", spec.Meta.BPM))
 	}
 	if !validBarCount(spec.Meta.Bars) {
-		errs = append(errs, fmt.Sprintf("bars must be 16, 32, 64, or 128, got %d", spec.Meta.Bars))
+		errs = append(errs, fmt.Sprintf("bars must be 4, 16, 32, 64, or 128, got %d", spec.Meta.Bars))
 	}
 	if customBars > 0 && spec.Meta.Bars != customBars {
 		errs = append(errs, fmt.Sprintf("bars mismatch: spec has %d, expected %d", spec.Meta.Bars, customBars))
@@ -113,7 +113,7 @@ func validateMeta(spec *PatternSpec, customBars int) []string {
 }
 
 func validBarCount(bars int) bool {
-	return bars == 16 || bars == 32 || bars == 64 || bars == 128
+	return bars == 4 || bars == 16 || bars == 32 || bars == 64 || bars == 128
 }
 
 func constraintsFor(patternType string) (constraints patternConstraints, ok bool, errMsg string) {
@@ -160,14 +160,21 @@ func validateActiveStep(spec *PatternSpec, constraints patternConstraints, index
 	return errs
 }
 
-func validateDensity(activeCount int, constraints patternConstraints, patternType string) []string {
+func validateDensity(activeCount int, constraints patternConstraints, patternType string, motifLen int) []string {
+	// Scale density limits proportionally when motif is longer than the base 16 steps.
+	scale := motifLen / 16
+	if scale < 1 {
+		scale = 1
+	}
+	minActive := constraints.minActive * scale
+	maxActive := constraints.maxActive * scale
 	switch {
-	case activeCount < constraints.minActive:
+	case activeCount < minActive:
 		return []string{fmt.Sprintf("density too low: %d active steps, minimum %d for %s",
-			activeCount, constraints.minActive, patternType)}
-	case activeCount > constraints.maxActive:
+			activeCount, minActive, patternType)}
+	case activeCount > maxActive:
 		return []string{fmt.Sprintf("density too high: %d active steps, maximum %d for %s",
-			activeCount, constraints.maxActive, patternType)}
+			activeCount, maxActive, patternType)}
 	default:
 		return nil
 	}

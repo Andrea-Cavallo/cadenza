@@ -15,11 +15,11 @@ var ArpEpic = StyleProfile{
 		DynamicCurve:  "tension",
 	},
 	Gate: GateProfile{
-		NormalGate:   0.88,
-		AccentGate:   0.92,
-		GhostGate:    0.40,
-		StaccatoGate: 0.30,
-		LegatoGate:   0.98,
+		NormalGate:   0.55,
+		AccentGate:   0.65,
+		GhostGate:    0.35,
+		StaccatoGate: 0.28,
+		LegatoGate:   0.82,
 	},
 	FilterSweep: FilterSweepProfile{
 		Curve:       "s_curve",

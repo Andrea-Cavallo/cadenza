@@ -28,6 +28,8 @@ func (r *Renderer) Render(spec *schema.PatternSpec, profile *styleprofile.StyleP
 		sweepStyle = spec.Automation.FilterSweep.Style
 	}
 
+	stepsPerBar := len(spec.Motif.Steps)
+
 	for bar := 0; bar < spec.Meta.Bars; bar++ {
 		// Apply evolution transforms for this bar.
 		barSteps := applyEvolution(spec.Motif.Steps, bar, spec.Evolution)
@@ -39,17 +41,17 @@ func (r *Renderer) Render(spec *schema.PatternSpec, profile *styleprofile.StyleP
 		// Filter sweep CC74 for this bar, synced to evolution.
 		// REFACTOR.md point 5: Pass pattern type for phase offset calculation
 		if sweepStyle != "" {
-			events = append(events, filterSweepEvents(bar, spec.Meta.Bars, sweepStyle, spec.VariationSeed, spec.PatternType, profile, spec.Evolution)...)
+			events = append(events, filterSweepEvents(bar, spec.Meta.Bars, sweepStyle, spec.VariationSeed, spec.PatternType, profile, spec.Evolution, stepsPerBar)...)
 		}
 
-		events = append(events, r.renderBar(bar, barSteps, profile, velScale)...)
+		events = append(events, r.renderBar(bar, barSteps, profile, velScale, stepsPerBar)...)
 	}
 
 	return events, nil
 }
 
 // renderBar converts all active steps in a single bar into NoteOn+NoteOff (and optional CC) events.
-func (r *Renderer) renderBar(bar int, barSteps []schema.StepSpec, profile *styleprofile.StyleProfile, velScale float64) []midi.MIDIEvent {
+func (r *Renderer) renderBar(bar int, barSteps []schema.StepSpec, profile *styleprofile.StyleProfile, velScale float64, stepsPerBar int) []midi.MIDIEvent {
 	var events []midi.MIDIEvent
 	for stepIdx, step := range barSteps {
 		if !step.Active || step.Note == "" {
@@ -61,7 +63,7 @@ func (r *Renderer) renderBar(bar int, barSteps []schema.StepSpec, profile *style
 			continue
 		}
 
-		tick := resolveTick(bar, stepIdx, profile)
+		tick := resolveTick(bar, stepIdx, stepsPerBar, profile)
 		vel := resolveVelocity(stepIdx, step.Accent, step.Ghost, profile, velScale)
 
 		// Slide gate: extend to next active note.
@@ -137,10 +139,11 @@ func dynamicCurveScale(bar, totalBars int, profile *styleprofile.StyleProfile) f
 }
 
 func findNextActiveTick(steps []schema.StepSpec, bar, currentStep int, profile *styleprofile.StyleProfile) int64 {
+	stepsPerBar := len(steps)
 	for i := currentStep + 1; i < len(steps); i++ {
 		if steps[i].Active {
-			return resolveTick(bar, i, profile)
+			return resolveTick(bar, i, stepsPerBar, profile)
 		}
 	}
-	return resolveTick(bar+1, 0, profile)
+	return resolveTick(bar+1, 0, stepsPerBar, profile)
 }

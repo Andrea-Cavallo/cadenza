@@ -15,10 +15,11 @@ var ArpFlowing = StyleProfile{
 		DynamicCurve:  "arch",
 	},
 	Gate: GateProfile{
-		NormalGate:   0.35,
-		AccentGate:   0.50,
-		GhostGate:    0.20,
-		StaccatoGate: 0.25,
+		NormalGate:   0.48,
+		AccentGate:   0.60,
+		GhostGate:    0.25,
+		StaccatoGate: 0.28,
+		LegatoGate:   0.78,
 	},
 	FilterSweep: FilterSweepProfile{
 		Curve:      "exponential",

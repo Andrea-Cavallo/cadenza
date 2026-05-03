@@ -1,8 +1,6 @@
-import { AccentName, ProviderStatus } from '../types'
+import { ProviderStatus } from '../types'
 
 interface TitleBarProps {
-  accent: AccentName
-  onAccentChange: (accent: AccentName) => void
   provider: string
   status: ProviderStatus | null
   running: boolean
@@ -10,9 +8,7 @@ interface TitleBarProps {
   onToggleLog: () => void
 }
 
-const ACCENTS: AccentName[] = ['cyan', 'lime', 'amber']
-
-export function TitleBar({ accent, onAccentChange, provider, status, running, logOpen, onToggleLog }: TitleBarProps) {
+export function TitleBar({ provider, status, running, logOpen, onToggleLog }: TitleBarProps) {
   const ready = provider === 'offline' || status?.ready
   const statusText = running ? 'Generating' : ready ? 'Ready' : 'Setup needed'
 
@@ -34,19 +30,6 @@ export function TitleBar({ accent, onAccentChange, provider, status, running, lo
       </div>
 
       <div className="titlebar-actions">
-        <div className="accent-switch" aria-label="Accent">
-          {ACCENTS.map(item => (
-            <button
-              key={item}
-              type="button"
-              className={accent === item ? 'on' : ''}
-              onClick={() => onAccentChange(item)}
-              title={`${item} accent`}
-            >
-              <span className={`swatch ${item}`} />
-            </button>
-          ))}
-        </div>
         <button type="button" className="icon-btn text" onClick={onToggleLog}>
           {logOpen ? 'Hide log' : 'Show log'}
         </button>

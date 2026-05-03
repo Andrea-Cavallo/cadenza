@@ -46,7 +46,7 @@ func computeSweepValue(sweepStyle string, progress float64, minVal, maxVal float
 	return minVal + (maxVal-minVal)*applyCurve(progress, profile.FilterSweep.Curve)
 }
 
-func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed, patternType string, profile *styleprofile.StyleProfile, evolutions []schema.EvolutionStep) []midi.MIDIEvent {
+func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed, patternType string, profile *styleprofile.StyleProfile, evolutions []schema.EvolutionStep, stepsPerBar int) []midi.MIDIEvent {
 	if profile.FilterSweep.Resolution == 0 {
 		return nil
 	}
@@ -77,8 +77,8 @@ func filterSweepEvents(bar, totalBars int, sweepStyle, variationSeed, patternTyp
 		phaseOffset = 0.0
 	}
 
-	barStartTick := int64(bar * 16 * ticksPerStep)
-	stepTicks := int64(16*ticksPerStep) / int64(resolution)
+	barStartTick := int64(bar * stepsPerBar * ticksPerStep)
+	stepTicks := int64(stepsPerBar*ticksPerStep) / int64(resolution)
 
 	events := make([]midi.MIDIEvent, 0, resolution)
 	for step := 0; step < resolution; step++ {
