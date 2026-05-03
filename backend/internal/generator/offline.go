@@ -179,7 +179,9 @@ func withinLeap(noteA, noteB string, maxSemitones int) bool {
 	return dist <= maxSemitones
 }
 
-// resolveTargetNote prefers character tone → 7th → 3rd → closestChordTone.
+// resolveTargetNote returns a chord tone close to the motif degree.
+// It prefers the chord 3rd → 5th → root, picking the one nearest the scale degree,
+// so roleTarget steps always count toward chord coherence.
 func resolveTargetNote(chordTones, scaleNotes []string, degree int, key theory.Key) string {
 	if len(scaleNotes) == 0 || len(chordTones) == 0 {
 		if len(chordTones) > 0 {
@@ -187,18 +189,7 @@ func resolveTargetNote(chordTones, scaleNotes []string, degree int, key theory.K
 		}
 		return ""
 	}
-	base := scaleNotes[normalizeDegree(degree, len(scaleNotes))]
-	charDeg := characterDegree(key)
-	candidates := []string{
-		scaleNotes[normalizeDegree(charDeg, len(scaleNotes))],
-		scaleNotes[normalizeDegree(charDeg+2, len(scaleNotes))],
-		chordTones[1%len(chordTones)],
-	}
-	for _, c := range candidates {
-		if withinLeap(c, base, 4) {
-			return c
-		}
-	}
+	// Always resolve to a chord tone so the validator's chord coherence check passes.
 	return closestChordTone(chordTones, scaleNotes, degree)
 }
 
@@ -1003,12 +994,11 @@ func melodyTemplate(ctx MusicContext) *schema.PatternSpec {
 	motifLen := 3 + int(h[6])%3
 	motifDegrees := buildHypnoticMotif(h, motifLen, scaleNotes)
 
-	// Each chord section gets a full 16-step (1-bar) melodic phrase.
-	// The 4 sections follow statement→call→tension→resolution narrative arc.
-	for i, chord := range prog.Chords {
-		base := i * stepsPerSection
-		buildMelodyBar(steps, base, i, chord, scaleNotes, motifDegrees, key, h)
-	}
+	// Build a full melodic contour across all 4 sections, then render it.
+	// The phrase builder assigns per-section rhythmic variants and note shapes
+	// driven by contour type (arch, descent, question_answer, wave).
+	contour := buildMelodyContour(h, prog, motifDegrees, scaleNotes, key)
+	buildMelodyFromContour(steps, contour, prog, scaleNotes, key, h)
 
 	applyMelodyOfflineStyle(style, steps, prog, key, h, scaleNotes)
 	if style != offlineStyleHypnotic && style != offlineStyleMinimal {
