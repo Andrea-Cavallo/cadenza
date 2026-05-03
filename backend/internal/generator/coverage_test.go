@@ -678,17 +678,78 @@ func TestOfflineSubModesValidateAndShapeDensity(t *testing.T) {
 		})
 	}
 
+	// 64-step motif (4 chord sections × 16 steps): expected counts scale ×4 from the 16-step era.
 	hypnoticBass := offlineTemplate("bassline", MusicContext{BPM: 124, Key: key, ChordProgression: prog, VariationSeed: "style-seed", OfflineStyle: offlineStyleHypnotic})
-	if got := activeStepCount(hypnoticBass.Motif.Steps); got != 8 {
-		t.Fatalf("hypnotic bass should stay sparse at 8 active steps, got %d", got)
+	if got := activeStepCount(hypnoticBass.Motif.Steps); got != 32 {
+		t.Fatalf("hypnotic bass should stay sparse at 32 active steps (2/sub-group×16), got %d", got)
 	}
 	drivingArp := offlineTemplate("arpeggio", MusicContext{BPM: 124, Key: key, ChordProgression: prog, VariationSeed: "style-seed", OfflineStyle: offlineStyleDriving})
-	if got := activeStepCount(drivingArp.Motif.Steps); got != 16 {
-		t.Fatalf("driving arpeggio should fill all 16 steps, got %d", got)
+	if got := activeStepCount(drivingArp.Motif.Steps); got != 64 {
+		t.Fatalf("driving arpeggio should fill all 64 steps, got %d", got)
 	}
 	minimalMelody := offlineTemplate("melody", MusicContext{BPM: 124, Key: key, ChordProgression: prog, VariationSeed: "style-seed", OfflineStyle: offlineStyleMinimal})
-	if got := activeStepCount(minimalMelody.Motif.Steps); got != 4 {
-		t.Fatalf("minimal melody should use exactly 4 active steps, got %d", got)
+	if got := activeStepCount(minimalMelody.Motif.Steps); got != 16 {
+		t.Fatalf("minimal melody should use exactly 16 active steps (4 downbeats×4 sections), got %d", got)
+	}
+}
+
+func TestOfflineStyleListeningFixture(t *testing.T) {
+	type offlineStyleCase struct {
+		Name         string   `json:"name"`
+		BPM          float64  `json:"bpm"`
+		Key          string   `json:"key"`
+		Seed         string   `json:"seed"`
+		Styles       []string `json:"styles"`
+		PatternTypes []string `json:"patternTypes"`
+	}
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "listening", "offline_style_cases.json"))
+	if err != nil {
+		t.Fatalf("read offline style fixture: %v", err)
+	}
+	var cases []offlineStyleCase
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatalf("decode offline style fixture: %v", err)
+	}
+	if len(cases) == 0 {
+		t.Fatal("expected at least one offline style fixture case")
+	}
+
+	validator := schema.NewValidator()
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			key, err := theory.ParseKey(tc.Key)
+			if err != nil {
+				t.Fatalf("parse key %q: %v", tc.Key, err)
+			}
+			prog := theory.SelectProgression(key.Root, key.Scale, tc.Seed)
+
+			for _, patternType := range tc.PatternTypes {
+				fingerprints := make(map[string]string)
+				for _, style := range tc.Styles {
+					ctx := MusicContext{
+						BPM:              tc.BPM,
+						Key:              key,
+						ChordProgression: prog,
+						VariationSeed:    tc.Seed,
+						OfflineStyle:     style,
+						Bars:             16,
+					}
+					spec := offlineTemplate(patternType, ctx)
+					if spec == nil {
+						t.Fatalf("%s %s: nil spec", patternType, style)
+					}
+					if err := validator.ValidateWithChords(spec, prog); err != nil {
+						t.Fatalf("%s %s invalid: %v", patternType, style, err)
+					}
+					fp := musicalFingerprint(spec.Motif.Steps)
+					if previousStyle, exists := fingerprints[fp]; exists {
+						t.Fatalf("%s styles %q and %q produced the same musical fingerprint %q", patternType, previousStyle, style, fp)
+					}
+					fingerprints[fp] = style
+				}
+			}
+		})
 	}
 }
 
@@ -727,6 +788,34 @@ func TestOfflineRhythmicFigureCountAndPassingNotes(t *testing.T) {
 	}
 }
 
+func TestContourTemplatesHaveCorrectDensity(t *testing.T) {
+	type densityCase struct {
+		name                 ContourType
+		rhythms              [3][stepsPerSection]byte
+		minActive, maxActive int
+	}
+	cases := []densityCase{
+		{ContourArch, archRhythms, 6, 8},
+		{ContourQuestionAnswer, questionAnswerRhythms, 5, 8},
+		{ContourTensionHold, tensionHoldRhythms, 7, 10},
+		{ContourDescRelease, descReleaseRhythms, 4, 6},
+	}
+	for _, tc := range cases {
+		for v, variant := range tc.rhythms {
+			active := 0
+			for _, code := range variant {
+				if code > 0 {
+					active++
+				}
+			}
+			if active < tc.minActive || active > tc.maxActive {
+				t.Errorf("%s variant %d: %d active steps, want [%d,%d]",
+					tc.name, v, active, tc.minActive, tc.maxActive)
+			}
+		}
+	}
+}
+
 func stepActivityFingerprint(steps []schema.StepSpec) string {
 	b := make([]byte, len(steps))
 	for i, s := range steps {
@@ -746,6 +835,36 @@ func stepActivityFingerprint(steps []schema.StepSpec) string {
 		b[i] = '0' + v
 	}
 	return string(b)
+}
+
+func musicalFingerprint(steps []schema.StepSpec) string {
+	var b strings.Builder
+	for _, s := range steps {
+		if !s.Active {
+			b.WriteByte('-')
+			continue
+		}
+		b.WriteString(theory.NoteNameOnly(s.Note))
+		switch {
+		case s.Accent:
+			b.WriteByte('!')
+		case s.Ghost:
+			b.WriteByte('g')
+		default:
+			b.WriteByte('.')
+		}
+		if s.Legato {
+			b.WriteByte('l')
+		}
+		if s.Staccato {
+			b.WriteByte('s')
+		}
+		if s.Slide {
+			b.WriteByte('>')
+		}
+		b.WriteByte('|')
+	}
+	return b.String()
 }
 
 func assertGateVariation(t *testing.T, spec *schema.PatternSpec) {
