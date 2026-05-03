@@ -1,0 +1,32 @@
+[
+  {
+    "seed": "fix-1",
+    "key": "A-minor_natural",
+    "fingerprint": "A!|-E.|--Ag|---C.|----Gg|-Eg|F!|--A.|---D.|-----F.|-F!|-G.|-Dg|--D.|-Fg|-E.|-D.|--G!|--F.|---Eg|-D.|--Gg|---"
+  },
+  {
+    "seed": "fix-2",
+    "key": "A-minor_natural",
+    "fingerprint": "E!|-B.|--Eg|---G.|----Dg|-Gg|A!|--C.|---F.|---Ag|-F.|-F!|-G.|-Dg|F.|-D.|-Fg|---D.|--C!|--B.|---Ag|-G.|--Cg|---"
+  },
+  {
+    "seed": "fix-3",
+    "key": "A-minor_natural",
+    "fingerprint": "E!|-B.|--Eg|---G.|----Dg|-Cg|D!|-Dg|E.|---A.|---Dg|-F.|-F!|-G.|-Eg|--E.|-Fg|-E.|-E.|--D!|--D.|---Cg|----Dg|---"
+  },
+  {
+    "seed": "fix-1",
+    "key": "D-dorian",
+    "fingerprint": "D!|----Dg|---F.|----Cg|-Ag|B!|--D.|-Bg|-G.|---Bg|-B.|-B!|Bg|C.|-Eg|B.|-E.|-Bg|-A.|-E.|--C!|--B.|---Ag|-G.|--Cg|---"
+  },
+  {
+    "seed": "fix-2",
+    "key": "D-dorian",
+    "fingerprint": "F!|---Eg|Fg|--------Eg|-Bg|C!|--E.|-Cg|-A.|---Cg|-B.|-B!|Bg|C.|-Gg|--G.|-Bg|-A.|-G.|--B!|--B.|---Ag|----Bg|---"
+  },
+  {
+    "seed": "fix-3",
+    "key": "D-dorian",
+    "fingerprint": "A!|---Gg|Ag|--------Gg|-Cg|D!|--G.|-Dg|-C.|-----B.|-B!|Bg|C.|-Gg|B.|-G.|-Bg|-A.|-G.|--G!|--G.|---Fg|----Gg|---"
+  }
+]
