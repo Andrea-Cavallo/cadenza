@@ -995,6 +995,41 @@ func TestMelodyNotePreferHigher(t *testing.T) {
 	}
 }
 
+func TestScoreMelodyPhrase_BasicMetrics(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "scorer-seed")
+	ctx := MusicContext{
+		BPM:              122,
+		Key:              key,
+		ChordProgression: prog,
+		VariationSeed:    "scorer-seed",
+		Bars:             16,
+	}
+	melodySpec := offlineTemplate("melody", ctx)
+	arpSpec := offlineTemplate("arpeggio", ctx)
+	if melodySpec == nil || arpSpec == nil {
+		t.Fatal("nil spec")
+	}
+
+	score := ScoreMelodyPhrase(melodySpec, arpSpec.Motif.Steps, prog, key)
+
+	if score.PhraseScore < 0 || score.PhraseScore > 1 {
+		t.Errorf("PhraseScore out of [0,1]: %.3f", score.PhraseScore)
+	}
+	if score.RestRatio < 0 || score.RestRatio > 1 {
+		t.Errorf("RestRatio out of [0,1]: %.3f", score.RestRatio)
+	}
+	if score.PickupPresence < 0 || score.PickupPresence > 1 {
+		t.Errorf("PickupPresence out of [0,1]: %.3f", score.PickupPresence)
+	}
+	if score.ContourScore < 0 || score.ContourScore > 1 {
+		t.Errorf("ContourScore out of [0,1]: %.3f", score.ContourScore)
+	}
+	if score.RegisterSep < 0 || score.RegisterSep > 1 {
+		t.Errorf("RegisterSep out of [0,1]: %.3f", score.RegisterSep)
+	}
+}
+
 func stepActivityFingerprint(steps []schema.StepSpec) string {
 	b := make([]byte, len(steps))
 	for i, s := range steps {
