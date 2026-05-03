@@ -841,6 +841,73 @@ func TestContourTemplatesHaveCorrectDensity(t *testing.T) {
 	}
 }
 
+func TestChooseSectionContourBias(t *testing.T) {
+	for seed := 0; seed < 100; seed++ {
+		h := seedHash(fmt.Sprintf("bias-%d", seed))
+		ct := chooseSectionContour(2, h)
+		if ct != ContourTensionHold && ct != ContourArch {
+			t.Errorf("section 2 seed %d: got %q, want tension_hold or arch", seed, ct)
+		}
+		ct3 := chooseSectionContour(3, h)
+		if ct3 != ContourDescRelease && ct3 != ContourQuestionAnswer {
+			t.Errorf("section 3 seed %d: got %q, want descending_release or question_answer", seed, ct3)
+		}
+	}
+}
+
+func TestBuildMelodyContourStructure(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "test-contour")
+	scaleNotes, _ := theory.ScaleNotes("A", "minor_natural")
+	h := seedHash("test-contour" + "A" + "minor_natural" + "melody")
+	motif := buildHypnoticMotif(h, 4, scaleNotes)
+
+	contour := buildMelodyContour(h, prog, motif, scaleNotes, key)
+
+	if len(contour.Sections) != 4 {
+		t.Fatalf("expected 4 sections, got %d", len(contour.Sections))
+	}
+	for i, intent := range contour.Sections[3].Intentions {
+		if intent.Active && intent.PreferHigh {
+			t.Errorf("section 3 step %d: PreferHigh should be false (resolution descends)", i)
+		}
+	}
+	for sec := 0; sec < 4; sec++ {
+		active := 0
+		for _, intent := range contour.Sections[sec].Intentions {
+			if intent.Active {
+				active++
+			}
+		}
+		if active < 4 {
+			t.Errorf("section %d has only %d active steps (want >= 4)", sec, active)
+		}
+	}
+}
+
+func TestMelodyContourDiversity(t *testing.T) {
+	key := theory.Key{Root: "A", Scale: "minor_natural", Mode: "minor"}
+	prog := theory.SelectProgression("A", "minor_natural", "base-diversity")
+	scaleNotes, _ := theory.ScaleNotes("A", "minor_natural")
+
+	fingerprints := make(map[string]bool)
+	for seed := 1; seed <= 10; seed++ {
+		h := seedHash(fmt.Sprintf("diversity-seed-%d", seed) + "A" + "minor_natural" + "melody")
+		motif := buildHypnoticMotif(h, 4, scaleNotes)
+		contour := buildMelodyContour(h, prog, motif, scaleNotes, key)
+		fp := fmt.Sprintf("%s|%s|%s|%s",
+			contour.Sections[0].Type,
+			contour.Sections[1].Type,
+			contour.Sections[2].Type,
+			contour.Sections[3].Type,
+		)
+		fingerprints[fp] = true
+	}
+	if len(fingerprints) < 3 {
+		t.Errorf("expected >= 3 distinct contour combinations from 10 seeds, got %d", len(fingerprints))
+	}
+}
+
 func stepActivityFingerprint(steps []schema.StepSpec) string {
 	b := make([]byte, len(steps))
 	for i, s := range steps {

@@ -123,6 +123,45 @@ func roleFromByte(b byte) (bool, stepRole) {
 	return false, ""
 }
 
+func chooseSectionContour(chordIdx int, h []byte) ContourType {
+	bias := h[(chordIdx*7+3)%32] % 2
+	options := [4][2]ContourType{
+		{ContourArch, ContourQuestionAnswer},
+		{ContourQuestionAnswer, ContourArch},
+		{ContourTensionHold, ContourArch},
+		{ContourDescRelease, ContourQuestionAnswer},
+	}
+	return options[chordIdx][bias]
+}
+
+func chooseRhythmicVariant(h []byte, sectionIdx int) int {
+	return int(h[(sectionIdx*11+17)%32]) % 3
+}
+
+func buildMelodyContour(h []byte, prog theory.ChordProgression, motifDegrees []int, scaleNotes []string, key theory.Key) MelodyContour {
+	var contour MelodyContour
+	for i := range prog.Chords {
+		ct := chooseSectionContour(i, h)
+		variant := chooseRhythmicVariant(h, i)
+		template := rhythmsByContour[ct][variant]
+		preferHigh := i != 3
+
+		var sec SectionContour
+		sec.Type = ct
+		sec.TargetDegree = motifDegrees[i%len(motifDegrees)]
+		for step, code := range template {
+			active, role := roleFromByte(code)
+			sec.Intentions[step] = StepIntention{
+				Active:     active,
+				Role:       role,
+				PreferHigh: active && preferHigh,
+			}
+		}
+		contour.Sections[i] = sec
+	}
+	return contour
+}
+
 // OfflineTemplate is the public version of offlineTemplate for use by service layer.
 func OfflineTemplate(patternType string, musicCtx MusicContext) *schema.PatternSpec {
 	return offlineTemplate(patternType, musicCtx)
