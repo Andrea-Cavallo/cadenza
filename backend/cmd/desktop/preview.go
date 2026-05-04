@@ -11,11 +11,14 @@ import (
 const previewStepsPerBar = 16
 
 func buildGenerationPreview(musicCtx generator.MusicContext, specs map[string]*schema.PatternSpec) GenerationPreview {
+	scaleNotes, _ := theory.ScaleNotes(musicCtx.Key.Root, musicCtx.Key.Scale)
 	return GenerationPreview{
 		Bars:        musicCtx.Bars,
 		StepsPerBar: previewStepsPerBar,
 		Chords:      buildChordPreview(musicCtx.ChordProgression),
 		Patterns:    buildTrackPreviews(specs),
+		ScaleNotes:  scaleNotes,
+		KeyName:     musicCtx.Key.Root + " " + musicCtx.Key.Mode,
 	}
 }
 

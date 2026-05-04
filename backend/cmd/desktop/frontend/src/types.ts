@@ -44,6 +44,8 @@ export interface GenerationPreview {
   stepsPerBar: number
   chords: ChordPreview[]
   patterns: TrackPreview[]
+  scaleNotes: string[]
+  keyName: string
 }
 
 export interface ChordPreview {

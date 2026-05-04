@@ -1,5 +1,7 @@
 import { PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { GenerationPreview, StepPreview, TrackPreview } from '../types'
+import { isInScale, midiToNoteName, midiToNoteWithOctave, snapToScale } from '../lib/music'
+import { useAudio } from '../hooks/useAudio'
 
 const PITCH_MIN = 33
 const PITCH_MAX = 96
@@ -26,7 +28,9 @@ interface DragState {
   index: number
   startStep: number
   startDuration: number
+  startMidi: number
   pointerStep: number
+  pointerY: number
 }
 
 interface SelectedNote {
@@ -51,7 +55,11 @@ export function PianoRoll({
   const [drag, setDrag] = useState<DragState | null>(null)
   const [zoom, setZoom] = useState(1)
   const [t, setT] = useState(0)
+  const [scaleLocked, setScaleLocked] = useState(true)
+  const [volume, setVolume] = useState(0.6)
+  const { playNote } = useAudio({ volume })
   const startRef = useRef<number | null>(null)
+  const prevActiveKeysRef = useRef<Set<string>>(new Set())
   const rafRef = useRef<number | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
 
@@ -89,6 +97,38 @@ export function PianoRoll({
     return () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current) }
   }, [cycleSec, playing])
 
+  // WAV-3: trigger playNote whenever the playhead crosses a note's leading edge
+  useEffect(() => {
+    if (!playing || !activeTrack) {
+      prevActiveKeysRef.current.clear()
+      return
+    }
+    const sp = preview?.stepsPerBar ?? 16
+    const tb = preview?.bars ?? 16
+    const ts = Math.max(tb * sp, activeTrack.steps.length > 0 ? activeTrack.steps.length : sp)
+    const W = Math.max(width, ts * BASE_STEP_W * zoom)
+    const sw = W / ts
+    const px = t * sp * sw
+
+    const currentActiveKeys = new Set<string>()
+    for (const s of activeTrack.steps) {
+      if (!s.active || s.midi <= 0) continue
+      const dur = Math.max(s.durationSteps || 1, 1)
+      const baseW = Math.max(sw * dur - 2, 5)
+      const noteW = s.staccato ? Math.max(baseW * 0.5, 4) : baseW
+      const x = s.step * sw
+      if (px >= x && px < x + noteW) {
+        const key = `${s.step}-${s.midi}`
+        currentActiveKeys.add(key)
+        if (!prevActiveKeysRef.current.has(key)) {
+          const vel = s.ghost ? 0.42 : s.accent ? 0.96 : 0.78
+          playNote(s.midi, 0.25, vel * 0.65)
+        }
+      }
+    }
+    prevActiveKeysRef.current = currentActiveKeys
+  })
+
   if (!preview || preview.patterns.length === 0) {
     return (
       <div className="real-roll empty-preview">
@@ -109,6 +149,7 @@ export function PianoRoll({
   const noteH = innerH / PITCH_RANGE
   const playheadX = t * stepsPerBar * stepW
   const selectedStep = selected?.patternType === activeTrack?.patternType ? activeTrack?.steps[selected!.index] : null
+  const effectiveScaleNotes = scaleLocked ? (preview.scaleNotes ?? []) : []
 
   const grids = Array.from({ length: totalSteps + 1 }, (_, step) => ({
     x: step * stepW,
@@ -137,6 +178,7 @@ export function PianoRoll({
 
   const startEdit = (event: ReactPointerEvent<SVGRectElement>, note: ReturnType<typeof buildRollNotes>[number]) => {
     setSelected({ patternType: activeTrack?.patternType ?? '', index: note.index })
+    playNote(note.midi, 0.35, note.opacity * 0.7)
     const x = svgX(event)
     const edge = Math.min(10, Math.max(5, note.w / 3))
     const mode: EditMode = x <= note.x + edge ? 'resize-left' : x >= note.x + note.w - edge ? 'resize-right' : 'drag'
@@ -146,7 +188,9 @@ export function PianoRoll({
       index: note.index,
       startStep: note.step,
       startDuration: note.durationSteps,
+      startMidi: note.midi,
       pointerStep,
+      pointerY: svgY(event),
     })
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -155,10 +199,22 @@ export function PianoRoll({
     if (!drag) return
     const pointerStep = snapStep(svgX(event), stepW)
     const delta = pointerStep - drag.pointerStep
+
+    if (drag.mode === 'drag') {
+      const deltaY = drag.pointerY - svgY(event)
+      const deltaMidi = Math.round(deltaY / noteH)
+      const rawMidi = clamp(drag.startMidi + deltaMidi, PITCH_MIN, PITCH_MAX - 1)
+      const newMidi = snapToScale(rawMidi, effectiveScaleNotes)
+      updateStep(drag.index, step => ({
+        ...step,
+        step: clamp(drag.startStep + delta, 0, totalSteps - 1),
+        midi: newMidi,
+        note: midiToNoteWithOctave(newMidi),
+      }))
+      return
+    }
+
     updateStep(drag.index, step => {
-      if (drag.mode === 'drag') {
-        return { ...step, step: clamp(drag.startStep + delta, 0, totalSteps - 1) }
-      }
       if (drag.mode === 'resize-right') {
         return { ...step, durationSteps: clamp(drag.startDuration + delta, 1, totalSteps - drag.startStep) }
       }
@@ -169,10 +225,35 @@ export function PianoRoll({
   }
 
   const finishEdit = () => setDrag(null)
+
   const deleteSelected = () => {
     if (!selectedStep || selected?.patternType !== activeTrack?.patternType) return
     updateStep(selected!.index, step => ({ ...step, active: false }))
     setSelected(null)
+  }
+
+  const handleCanvasPointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (!activeTrack || !preview) return
+    const x = svgX(event)
+    const y = svgY(event)
+    const clickStep = clamp(Math.floor(x / stepW), 0, totalSteps - 1)
+    const rawMidi = clamp(PITCH_MAX - 1 - Math.floor((y - padTop) / noteH), PITCH_MIN, PITCH_MAX - 1)
+    const newMidi = snapToScale(rawMidi, effectiveScaleNotes)
+    const stepIdx = activeTrack.steps.findIndex(s => s.step === clickStep)
+    if (stepIdx < 0) return
+    updateStep(stepIdx, s => ({
+      ...s,
+      active: true,
+      midi: newMidi,
+      note: midiToNoteWithOctave(newMidi),
+      velocity: 84,
+      accent: false,
+      ghost: false,
+      staccato: false,
+      legato: false,
+    }))
+    playNote(newMidi, 0.35, 0.6)
+    setSelected({ patternType: activeTrack.patternType, index: stepIdx })
   }
 
   return (
@@ -196,6 +277,17 @@ export function PianoRoll({
           <button type="button" onClick={() => setZoom(value => clamp(value - 0.5, 1, 5))}>-</button>
           <span>{zoom.toFixed(1)}x</span>
           <button type="button" onClick={() => setZoom(value => clamp(value + 0.5, 1, 5))}>+</button>
+          <span className="vol-label">VOL</span>
+          <input
+            type="range"
+            className="vol-slider"
+            min={0}
+            max={1}
+            step={0.05}
+            value={volume}
+            onChange={event => setVolume(Number(event.target.value))}
+            title={`Volume: ${Math.round(volume * 100)}%`}
+          />
         </div>
       </div>
 
@@ -214,6 +306,18 @@ export function PianoRoll({
           </button>
         ))}
         <span className="active-track-copy">Editing {activeTrack?.label ?? 'track'} - snap 1/16</span>
+        {(preview.scaleNotes?.length ?? 0) > 0 && (
+          <button
+            type="button"
+            className={`scale-lock-btn ${scaleLocked ? 'on' : ''}`}
+            onClick={() => setScaleLocked(v => !v)}
+            title={scaleLocked
+              ? `Scale lock ON (${preview.keyName}) — click to disable`
+              : `Scale lock OFF — click to enable (${preview.keyName})`}
+          >
+            {scaleLocked ? '🔒' : '🔓'} {preview.keyName}
+          </button>
+        )}
       </div>
 
       <div className="roll-scroll">
@@ -228,6 +332,25 @@ export function PianoRoll({
           onPointerUp={finishEdit}
           onPointerCancel={finishEdit}
         >
+          {/* Scale row backgrounds — in-scale rows slightly lighter, out-of-scale darker */}
+          {Array.from({ length: PITCH_RANGE }, (_, i) => {
+            const midi = PITCH_MAX - 1 - i
+            const inScale = effectiveScaleNotes.length > 0
+              ? isInScale(midiToNoteName(midi), effectiveScaleNotes)
+              : true
+            return (
+              <rect
+                key={`row-${midi}`}
+                x={0}
+                y={padTop + i * noteH}
+                width={W}
+                height={noteH}
+                fill={inScale ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.14)'}
+                pointerEvents="none"
+              />
+            )
+          })}
+
           {octaves.map((y, i) => (
             <line key={`o${i}`} x1={0} x2={W} y1={y} y2={y} stroke="rgba(255,255,255,0.07)" strokeWidth="1" />
           ))}
@@ -254,6 +377,18 @@ export function PianoRoll({
               B{String(bar + 1).padStart(2, '0')}
             </text>
           ))}
+
+          {/* Transparent canvas — click on empty space to add a note */}
+          <rect
+            x={0}
+            y={padTop}
+            width={W}
+            height={H - padTop - padBot}
+            fill="transparent"
+            style={{ cursor: drag ? 'default' : 'crosshair' }}
+            onPointerDown={handleCanvasPointerDown}
+          />
+
           {notes.map(note => (
             <g key={note.key} className={`roll-note ${note.selected ? 'selected' : ''}`}>
               <rect
@@ -268,6 +403,15 @@ export function PianoRoll({
               />
               <rect className="note-edge" x={note.x + 1} y={note.y} width={5} height={note.h} />
               <rect className="note-edge right" x={note.x + note.w - 4} y={note.y} width={5} height={note.h} />
+              {/* Legato indicator — small arrow at right edge */}
+              {note.legato && (
+                <polygon
+                  points={`${note.x + note.w + 1},${note.y + note.h * 0.25} ${note.x + note.w + 5},${note.y + note.h * 0.5} ${note.x + note.w + 1},${note.y + note.h * 0.75}`}
+                  fill={noteColor(activeTrack?.patternType, note.active)}
+                  opacity={note.opacity * 0.8}
+                  pointerEvents="none"
+                />
+              )}
               {note.label && (
                 <text
                   x={note.x + 7}
@@ -335,6 +479,22 @@ export function PianoRoll({
                 />
                 Ghost
               </label>
+              <label className="mini-check">
+                <input
+                  type="checkbox"
+                  checked={selectedStep.staccato}
+                  onChange={event => updateStep(selected!.index, step => ({ ...step, staccato: event.target.checked, legato: false }))}
+                />
+                Staccato
+              </label>
+              <label className="mini-check">
+                <input
+                  type="checkbox"
+                  checked={selectedStep.legato}
+                  onChange={event => updateStep(selected!.index, step => ({ ...step, legato: event.target.checked, staccato: false }))}
+                />
+                Legato
+              </label>
               <button type="button" className="btn ghost danger" onClick={deleteSelected}>Delete note</button>
             </>
           ) : (
@@ -350,11 +510,18 @@ export function PianoRoll({
     </div>
   )
 
-  function svgX(event: ReactPointerEvent<SVGElement>) {
+  function svgX(event: { clientX: number }): number {
     const svg = svgRef.current
     if (!svg) return 0
     const rect = svg.getBoundingClientRect()
     return clamp(((event.clientX - rect.left) / rect.width) * W, 0, W)
+  }
+
+  function svgY(event: { clientY: number }): number {
+    const svg = svgRef.current
+    if (!svg) return 0
+    const rect = svg.getBoundingClientRect()
+    return clamp(((event.clientY - rect.top) / rect.height) * H, 0, H)
   }
 }
 
@@ -372,8 +539,9 @@ function buildRollNotes(
     .filter(item => item.step.active && item.step.midi > 0)
     .map(({ step, index }) => {
       const durationSteps = Math.max(step.durationSteps || 1, 1)
+      const baseW = Math.max(stepW * durationSteps - 2, 5)
+      const w = step.staccato ? Math.max(baseW * 0.5, 4) : baseW
       const x = step.step * stepW
-      const w = Math.max(stepW * durationSteps - 2, 5)
       const y = padTop + (PITCH_MAX - clamp(step.midi, PITCH_MIN, PITCH_MAX)) * noteH
       const h = Math.max(noteH * (step.accent ? 1.45 : 1.05), 4)
       const active = playheadX >= x && playheadX < x + w
@@ -383,6 +551,7 @@ function buildRollNotes(
         index,
         step: step.step,
         durationSteps,
+        midi: step.midi,
         x,
         y,
         w,
@@ -391,6 +560,8 @@ function buildRollNotes(
         selected: isSelected,
         label: step.note,
         opacity: isSelected ? 1 : active ? 1 : step.ghost ? 0.42 : step.accent ? 0.96 : 0.78,
+        staccato: step.staccato ?? false,
+        legato: step.legato ?? false,
       }
     })
 }

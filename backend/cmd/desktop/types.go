@@ -35,6 +35,8 @@ type GenerationPreview struct {
 	StepsPerBar int            `json:"stepsPerBar"`
 	Chords      []ChordPreview `json:"chords"`
 	Patterns    []TrackPreview `json:"patterns"`
+	ScaleNotes  []string       `json:"scaleNotes"` // e.g. ["A","B","C","D","E","F","G"]
+	KeyName     string         `json:"keyName"`    // e.g. "Am"
 }
 
 type ChordPreview struct {
