@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Bass groove palette per BPM/mode**: `chooseBassGroovePalette` selects genre-matched sub-pattern sets — warehouse techno (bpm ≥ 126 minor), melodic/minimal techno (minor < 126), house (major). Replaces random 4-pattern selection with a coherent 3-pattern palette, giving each style a recognizable groove identity.
+- **A-B-A-B bass groove structure**: each 16-step section uses two alternating sub-patterns (beats 1&3 share p0, beats 2&4 share p1) instead of four independent patterns. Echo positions (beats 3-4) swap root↔fifth so the phrase fingerprint differs even when chords repeat across sections; musically equivalent to the standard root-on-1-fifth-on-3 bass technique.
+- **Melody `HeightPref` per step**: `StepIntention` gains an `int` field carrying the per-step pitch direction from `heightsForContour` (ContourArch/QuestionAnswer/TensionHold/DescRelease). Echo and fill notes now move in the direction the contour prescribes instead of always ascending; section-level octave preference follows the same height signal.
+- **`heightsForContour` helper**: maps `ContourType` → a 16-element `[stepsPerSection]int` array of -1/0/+1 pitch height preferences used by the melody phrase builder.
+
 ### Fixed
 - **Bass case 3 octave out-of-range**: `root + "1"` produced MIDI values below 33 for roots C–G# (e.g. F1=29); changed to `root + "2"` so all bass notes stay in the validator range [33, 55].
 - **TestSingleGenerator_GenerateBranches subtests**: the `% 7` hash mapping added for the break-pattern removal caused case 3 to be selected for F-chord sections, making the offline template fail validation and breaking the MockProvider fallback tests.

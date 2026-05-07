@@ -62,6 +62,7 @@ type StepIntention struct {
 	Role       stepRole
 	Direction  int  // -1 down, 0 neutral, +1 up
 	PreferHigh bool // preferisce ottava 6 su 5
+	HeightPref int  // -1=preferisce ottava bassa, 0=neutro, +1=preferisce ottava alta
 }
 
 // SectionContour tiene le 16 intenzioni per una sezione accordo.
@@ -123,6 +124,41 @@ func roleFromByte(b byte) (bool, stepRole) {
 	return false, ""
 }
 
+// chooseBassGroovePalette restituisce un set di indici di sub-pattern compatibili
+// tra loro per lo stile del genere dato BPM e modo della chiave.
+// I pattern all'interno di un palette suonano coerenti insieme (stesso groove family).
+func chooseBassGroovePalette(bpm float64, key theory.Key) []byte {
+	isMinor := key.Mode == "minor" || key.Mode == "dorian" || key.Mode == "phrygian"
+	if isMinor && bpm >= 126 {
+		return []byte{0, 5, 6} // driving, pump, chromatic — warehouse techno
+	}
+	if isMinor {
+		return []byte{1, 3, 5} // syncopated, long sub, pump — melodic/minimal techno
+	}
+	return []byte{0, 4, 1} // driving, harmonic walk, syncopated — house
+}
+
+// heightsForContour mappa ogni step della sezione a una preferenza di altezza (-1/0/+1)
+// cosicché il tipo di contour guida il MOVIMENTO DI PITCH, non solo il ritmo.
+func heightsForContour(ct ContourType) [stepsPerSection]int {
+	switch ct {
+	case ContourArch:
+		// Salita nella prima metà, discesa nella seconda.
+		return [stepsPerSection]int{0, 0, 1, 1, 1, 0, 0, 1, 0, 0, -1, -1, 0, 0, 0, 0}
+	case ContourQuestionAnswer:
+		// Domanda sale, risposta risolve verso il basso.
+		return [stepsPerSection]int{0, 0, 1, 1, 0, 0, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0}
+	case ContourTensionHold:
+		// Plateau alto (tensione), poi rilascio.
+		return [stepsPerSection]int{0, 1, 1, 1, 1, 0, 1, 1, 0, 0, -1, -1, 0, 0, 0, 0}
+	case ContourDescRelease:
+		// Inizio alto, discesa graduale.
+		return [stepsPerSection]int{1, 0, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0}
+	default:
+		return [stepsPerSection]int{}
+	}
+}
+
 func chooseSectionContour(chordIdx int, h []byte) ContourType {
 	bias := h[(chordIdx*7+3)%32] % 2
 	options := [4][2]ContourType{
@@ -146,6 +182,7 @@ func buildMelodyContour(h []byte, prog theory.ChordProgression, motifDegrees []i
 		template := rhythmsByContour[ct][variant]
 		preferHigh := i != 3
 
+		heights := heightsForContour(ct)
 		var sec SectionContour
 		sec.Type = ct
 		sec.TargetDegree = motifDegrees[i%len(motifDegrees)]
@@ -155,6 +192,7 @@ func buildMelodyContour(h []byte, prog theory.ChordProgression, motifDegrees []i
 				Active:     active,
 				Role:       role,
 				PreferHigh: active && preferHigh,
+				HeightPref: heights[step],
 			}
 		}
 		contour.Sections[i] = sec
@@ -243,8 +281,11 @@ func fillMelodySection(steps []schema.StepSpec, base int, sec SectionContour, ch
 		case rolePickup:
 			noteName = approachNote(target, key)
 		case roleEcho:
+			// HeightPref guida la direzione dell'echo; se neutro, usa variazione hash.
 			echoDeg := normalizeDegree(sec.TargetDegree+1, len(scaleNotes))
-			if h[(base+step)%32]%2 == 0 {
+			if intent.HeightPref < 0 {
+				echoDeg = normalizeDegree(sec.TargetDegree-1, len(scaleNotes))
+			} else if intent.HeightPref == 0 && h[(base+step)%32]%2 == 0 {
 				echoDeg = normalizeDegree(sec.TargetDegree-1, len(scaleNotes))
 			}
 			if len(scaleNotes) > 0 {
@@ -253,7 +294,12 @@ func fillMelodySection(steps []schema.StepSpec, base int, sec SectionContour, ch
 				noteName = target
 			}
 		case roleFill:
-			fillDeg := normalizeDegree(sec.TargetDegree+2, len(scaleNotes))
+			// HeightPref determina se il fill sale (+2) o scende (-2) dalla nota target.
+			fillOffset := 2
+			if intent.HeightPref < 0 {
+				fillOffset = -2
+			}
+			fillDeg := normalizeDegree(sec.TargetDegree+fillOffset, len(scaleNotes))
 			if len(scaleNotes) > 0 {
 				noteName = scaleNotes[fillDeg]
 			} else {
@@ -263,7 +309,13 @@ func fillMelodySection(steps []schema.StepSpec, base int, sec SectionContour, ch
 			noteName = target
 		}
 
+		// HeightPref controlla l'ottava preferita; leapDebt ha priorità per compensare salti.
 		preferHigh := intent.PreferHigh
+		if intent.HeightPref > 0 {
+			preferHigh = true
+		} else if intent.HeightPref < 0 {
+			preferHigh = false
+		}
 		if leapDebt != 0 && intent.Role == roleTarget {
 			preferHigh = leapDebt > 0
 			leapDebt = 0
@@ -330,8 +382,11 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 
 	steps := make([]schema.StepSpec, motifSteps)
 
-	// Each chord section gets 16 steps (1 full musical bar) of varied bass content.
-	// 4 distinct 4-step sub-patterns ensure anti-loop validator satisfaction.
+	// Groove palette: 3 sub-pattern indices stilisticamente coerenti per BPM/modo.
+	// Struttura A-B-A-B: beats 1 e 3 condividono il pattern base, beats 2 e 4
+	// condividono una variazione — crea un'identità di groove riconoscibile.
+	palette := chooseBassGroovePalette(bpm, key)
+
 	for i, chord := range prog.Chords {
 		base := i * stepsPerSection
 		root := chord.Root + "2"
@@ -346,17 +401,25 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 
 		approach := approachNote(chord.Root, key) + "2"
 
-		// Select 4 distinct sub-patterns using different hash offsets per chord section.
-		// Adding 2/4/6 mod 7 guarantees all four values are different (7 is prime).
-		p0 := h[(i*7+2)%32] % 7
-		p1 := (p0 + 2) % 7
-		p2 := (p0 + 4) % 7
-		p3 := (p0 + 6) % 7
+		// highFifth: fifth at octave 3 for pattern 2 echo (octave bounce), capped at MIDI 55.
+		highFifth := chordFifth(chord) + "3"
+		if m, _ := theory.NoteToMIDI(highFifth); m > 55 {
+			highFifth = fifth
+		}
+
+		// A-B-A-B groove: beats 1 e 3 = pattern base, beats 2 e 4 = variazione.
+		// The echo positions (beats 3-4) swap root↔fifth so the phrase fingerprint
+		// differs even when the same chord repeats across sections (prevents anti-loop
+		// violations in progressions like i–VI–VII–i). Musically correct: root on
+		// beats 1-2, fifth on beats 3-4 is standard bass technique.
+		pi := int(h[(i*7+2)%32]) % len(palette)
+		p0 := palette[pi]
+		p1 := palette[(pi+1+int(h[(i*7+4)%32]))%len(palette)]
 
 		fillBassSubPattern(steps, base+0, p0, root, fifth, color, highRoot, approach, key)
 		fillBassSubPattern(steps, base+4, p1, root, fifth, color, highRoot, approach, key)
-		fillBassSubPattern(steps, base+8, p2, root, fifth, color, highRoot, approach, key)
-		fillBassSubPattern(steps, base+12, p3, root, fifth, color, highRoot, approach, key)
+		fillBassSubPattern(steps, base+8, p0, fifth, root, color, highFifth, approach, key)
+		fillBassSubPattern(steps, base+12, p1, fifth, root, color, highFifth, approach, key)
 	}
 
 	applyBassOfflineStyle(style, steps, prog, h)
