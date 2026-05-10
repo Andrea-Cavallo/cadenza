@@ -51,6 +51,10 @@ The progression {{CHORD_PROGRESSION}} maps to 4 sections:
 **Anti-repetition rule:**
 No identical 4-step voicing pattern repeated in all 4 sections. Vary the arpeggio direction (ascending/descending/pendulum) across sections. Seed {{SEED}} must produce a pattern noticeably different from other seeds.
 
+**Scale notes for {{KEY}} {{SCALE}} (MEMORIZE — use ONLY these note names):**
+{{SCALE_NOTES}}
+No other note names are valid. E.g. for dorian the raised 6th IS in the scale; F natural is NOT in A dorian.
+
 **Requirements:**
 - Use notes ONLY from the {{KEY}} {{SCALE}} scale (chord tones first, then scale extensions)
 - Use `legato: true` for connected phrases (at least half the steps)
@@ -66,7 +70,7 @@ No identical 4-step voicing pattern repeated in all 4 sections. Vary the arpeggi
 - spec_version: "1.0"
 - pattern_type: "arpeggio"
 - meta: {name, bpm, key, bars: 16, description}
-- theory: {key, mode, scale, octave_range: [3, 6]}
+- theory: {key: "{{KEY}}", mode: "{{MODE}}", scale: "{{SCALE}}", octave_range: [3, 6]}
 - style_profile: one of "arp_flowing" | "arp_epic" | "arp_staccato"
 - motif: {length: 16, steps: [{active, note?, accent?, legato?, ghost?}]}
 - evolution: [{from_bar, to_bar, action, intensity}] — 4 phases, bars 1-4, 5-8, 9-12, 13-16

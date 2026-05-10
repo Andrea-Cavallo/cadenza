@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Andrea-Cavallo/cadenza/internal/llm"
 	"github.com/Andrea-Cavallo/cadenza/internal/models"
@@ -21,7 +22,8 @@ func buildProvider(noLLM bool, providerName, model string) (llm.Provider, error)
 	case "claude":
 		return llm.NewClaudeProvider(model)
 	case "ollama":
-		return llm.NewOllamaProvider("http://localhost:11434", model), nil
+		// Local models are slow; 5-minute timeout per request, run sequentially via mg.Sequential.
+		return llm.NewOllamaProviderWithTimeout("http://localhost:11434", model, 5*time.Minute), nil
 	case "openai":
 		return llm.NewOpenAIProvider(model)
 	case "gemini":

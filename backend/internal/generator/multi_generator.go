@@ -58,8 +58,30 @@ type MultiGenerator struct {
 	renderer  *renderer.Renderer
 	writer    *midipkg.Writer
 	cache     *cache.Cache
-	outputDir string
-	NoLLM     bool
+	outputDir  string
+	NoLLM      bool
+	Sequential bool // run patterns one-at-a-time (needed for local Ollama which queues requests)
+	warnMu     sync.Mutex
+	warnings   []string
+}
+
+func (mg *MultiGenerator) addWarning(msg string) {
+	mg.warnMu.Lock()
+	defer mg.warnMu.Unlock()
+	mg.warnings = append(mg.warnings, msg)
+}
+
+// Warnings returns any LLM-fallback warnings accumulated during the last generation.
+func (mg *MultiGenerator) Warnings() []string {
+	mg.warnMu.Lock()
+	defer mg.warnMu.Unlock()
+	return append([]string(nil), mg.warnings...)
+}
+
+func (mg *MultiGenerator) clearWarnings() {
+	mg.warnMu.Lock()
+	defer mg.warnMu.Unlock()
+	mg.warnings = mg.warnings[:0]
 }
 
 func NewMultiGenerator(
@@ -152,6 +174,7 @@ func isKnownPatternType(patternType string) bool {
 }
 
 func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicContext, varNum int) (*GenerationResult, error) {
+	mg.clearWarnings()
 	metrics.GenerationsTotal.Add(1)
 	ts := time.Now().Format("20060102_150405")
 
@@ -166,34 +189,49 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 	)
 
 	patternTypes := []string{"bassline", "arpeggio", "melody"}
-	results := make(chan patternResult, len(patternTypes))
-	var wg sync.WaitGroup
+	patterns := make(map[string]*schema.PatternSpec, len(patternTypes))
 
-	for _, pt := range patternTypes {
-		wg.Add(1)
-		go func(pType string) {
-			defer wg.Done()
-			slog.Debug("generating pattern", "type", pType, "seed", musicCtx.VariationSeed)
-			spec, err := mg.generatePattern(ctx, musicCtx, pType)
+	if mg.Sequential {
+		// Sequential mode: one request at a time (required for Ollama which queues all requests).
+		for _, pt := range patternTypes {
+			slog.Debug("generating pattern", "type", pt, "seed", musicCtx.VariationSeed)
+			spec, err := mg.generatePattern(ctx, musicCtx, pt)
 			if err != nil {
-				slog.Debug("pattern generation failed", "type", pType, "error", err)
-			} else {
-				slog.Debug("pattern generated", "type", pType, "steps", len(spec.Motif.Steps), "profile", spec.StyleProfile)
+				metrics.GenerationErrors.Add(1)
+				return nil, fmt.Errorf("%s: %w", pt, err)
 			}
-			results <- patternResult{patternType: pType, spec: spec, err: err}
-		}(pt)
-	}
-
-	wg.Wait()
-	close(results)
-
-	patterns := make(map[string]*schema.PatternSpec)
-	for r := range results {
-		if r.err != nil {
-			metrics.GenerationErrors.Add(1)
-			return nil, fmt.Errorf("%s: %w", r.patternType, r.err)
+			slog.Debug("pattern generated", "type", pt, "steps", len(spec.Motif.Steps), "profile", spec.StyleProfile)
+			patterns[pt] = spec
 		}
-		patterns[r.patternType] = r.spec
+	} else {
+		results := make(chan patternResult, len(patternTypes))
+		var wg sync.WaitGroup
+
+		for _, pt := range patternTypes {
+			wg.Add(1)
+			go func(pType string) {
+				defer wg.Done()
+				slog.Debug("generating pattern", "type", pType, "seed", musicCtx.VariationSeed)
+				spec, err := mg.generatePattern(ctx, musicCtx, pType)
+				if err != nil {
+					slog.Debug("pattern generation failed", "type", pType, "error", err)
+				} else {
+					slog.Debug("pattern generated", "type", pType, "steps", len(spec.Motif.Steps), "profile", spec.StyleProfile)
+				}
+				results <- patternResult{patternType: pType, spec: spec, err: err}
+			}(pt)
+		}
+
+		wg.Wait()
+		close(results)
+
+		for r := range results {
+			if r.err != nil {
+				metrics.GenerationErrors.Add(1)
+				return nil, fmt.Errorf("%s: %w", r.patternType, r.err)
+			}
+			patterns[r.patternType] = r.spec
+		}
 	}
 	arrangementScore := schema.ScoreArrangement(patterns)
 	slog.Info("arrangement score",
@@ -277,6 +315,7 @@ func (mg *MultiGenerator) generatePattern(ctx context.Context, musicCtx MusicCon
 			"type", patternType,
 			"error", err,
 		)
+		mg.addWarning(fmt.Sprintf("LLM failed for %s — offline template used (%v)", patternType, err))
 		spec = offlineTemplate(patternType, musicCtx)
 		if spec == nil {
 			return nil, fmt.Errorf("no offline template for %q after LLM failure: %w", patternType, err)

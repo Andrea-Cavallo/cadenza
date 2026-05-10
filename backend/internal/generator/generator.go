@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -127,6 +128,7 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 	prompt = strings.ReplaceAll(prompt, "{{MODE}}", musicCtx.Key.Mode)
 	prompt = strings.ReplaceAll(prompt, "{{SCALE}}", musicCtx.Key.Scale)
 	prompt = strings.ReplaceAll(prompt, "{{MODE_CHARACTER}}", modeCharacterDescription(musicCtx.Key))
+	prompt = strings.ReplaceAll(prompt, "{{SCALE_NOTES}}", scaleNoteStringForPrompt(musicCtx.Key))
 	prompt = strings.ReplaceAll(prompt, "{{BPM}}", fmt.Sprintf("%.0f", musicCtx.BPM))
 	prompt = strings.ReplaceAll(prompt, "{{SEED}}", musicCtx.VariationSeed)
 	prompt = strings.ReplaceAll(prompt, "{{CHORD_PROGRESSION}}", chordStr)
@@ -159,19 +161,62 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 		if err := json.Unmarshal(raw, &spec); err != nil {
 			return fmt.Errorf("json parse: %w", err)
 		}
+		// LLMs sometimes write "minor_natural" in theory.scale even for modal keys (e.g. dorian).
+		// Always use the actual key from the music context so note validation is correct.
+		spec.Theory.Key = musicCtx.Key.Root
+		spec.Theory.Scale = musicCtx.Key.Scale
 		return g.validator.ValidateWithChords(&spec, musicCtx.ChordProgression)
 	}
 
+	slog.Debug("starting llm generation",
+		"type", patternType,
+		"provider", g.provider.Name(),
+		"key", musicCtx.Key.Root,
+		"scale", musicCtx.Key.Scale,
+		"bpm", musicCtx.BPM,
+		"bars", musicCtx.Bars,
+		"seed", musicCtx.VariationSeed,
+	)
 	rawJSON, err := llm.GenerateWithRetry(ctx, g.provider, req, validate)
 	if err != nil {
-		return nil, err
+		var retryErr *llm.RetryExhaustedError
+		if errors.As(err, &retryErr) && len(retryErr.LastRaw) > 0 {
+			slog.Info("attempting programmatic repair",
+				"type", patternType,
+				"last_error", retryErr.Cause,
+				"raw_bytes", len(retryErr.LastRaw),
+				"raw_snippet", string(retryErr.LastRaw[:min(300, len(retryErr.LastRaw))]),
+			)
+			if repaired, repairErr := repairSpec(retryErr.LastRaw, musicCtx, validate); repairErr == nil {
+				slog.Info("programmatic repair succeeded", "type", patternType)
+				rawJSON = repaired
+				err = nil
+			} else {
+				slog.Warn("programmatic repair failed",
+					"type", patternType,
+					"repair_err", repairErr,
+					"original_err", retryErr.Cause,
+				)
+				return nil, err
+			}
+		} else {
+			slog.Warn("llm generation failed, no raw output to repair",
+				"type", patternType,
+				"error", err,
+			)
+			return nil, err
+		}
 	}
 
 	var spec schema.PatternSpec
 	if err := json.Unmarshal(rawJSON, &spec); err != nil {
 		return nil, fmt.Errorf("final parse: %w", err)
 	}
+	spec.Theory.Key = musicCtx.Key.Root
+	spec.Theory.Scale = musicCtx.Key.Scale
 	specPtr, finalJSON := g.critiqueAndMaybeRevise(ctx, req, rawJSON, &spec, musicCtx, plan)
+	specPtr.Theory.Key = musicCtx.Key.Root
+	specPtr.Theory.Scale = musicCtx.Key.Scale
 	score := g.validator.ScoreMusicality(specPtr, musicCtx.ChordProgression)
 	slog.Info("musical score",
 		"type", patternType,
@@ -222,29 +267,115 @@ func (g *SingleGenerator) loadOrBuildMusicalPlan(musicCtx MusicContext, patternT
 }
 
 func exampleSpecJSON(patternType string) string {
+	var (
+		octaveRange  [2]int
+		steps        []schema.StepSpec
+		styleProfile string
+		automation   schema.AutomationIntent
+	)
+
+	switch patternType {
+	case "melody":
+		octaveRange = [2]int{4, 6}
+		styleProfile = "melody_expressive"
+		automation = schema.AutomationIntent{ModWheel: &schema.ModWheelIntent{Style: "moderate"}}
+		steps = melodyExampleSteps()
+	case "arpeggio":
+		octaveRange = [2]int{3, 6}
+		styleProfile = "arp_flowing"
+		automation = schema.AutomationIntent{FilterSweep: &schema.FilterSweepIntent{Style: "subtle"}}
+		steps = arpeggioExampleSteps()
+	default: // bassline
+		octaveRange = [2]int{1, 3}
+		styleProfile = "bass_progressive"
+		automation = schema.AutomationIntent{FilterSweep: &schema.FilterSweepIntent{Style: "medium"}}
+		steps = basslineExampleSteps()
+	}
+
 	example := schema.PatternSpec{
 		SpecVersion:  "1.0",
 		PatternType:  patternType,
 		Meta:         schema.PatternMeta{Name: "example", BPM: 122, Key: "Am", Bars: 16, Description: "example pattern"},
-		Theory:       schema.TheorySpec{Key: "A", Mode: "minor", Scale: "minor_natural", OctaveRange: [2]int{2, 3}},
-		StyleProfile: "bass_progressive",
-		Motif: schema.MotifSpec{
-			Length: 16,
-			Steps: []schema.StepSpec{
-				{Active: true, Note: "A2", Accent: true},
-				{Active: true, Note: "A2"},
-				{Active: false},
-				{Active: true, Note: "E2", Slide: true},
-			},
-		},
+		Theory:       schema.TheorySpec{Key: "A", Mode: "minor", Scale: "minor_natural", OctaveRange: octaveRange},
+		StyleProfile: styleProfile,
+		Motif:        schema.MotifSpec{Length: 16, Steps: steps},
 		Evolution: []schema.EvolutionStep{
 			{FromBar: 1, ToBar: 4, Action: "introduce", Intensity: 0.3},
+			{FromBar: 5, ToBar: 8, Action: "build", Intensity: 0.6},
+			{FromBar: 9, ToBar: 12, Action: "peak", Intensity: 0.9},
+			{FromBar: 13, ToBar: 16, Action: "release", Intensity: 0.5},
 		},
-		Automation:    schema.AutomationIntent{FilterSweep: &schema.FilterSweepIntent{Style: "medium"}},
+		Automation:    automation,
 		VariationSeed: "example-seed",
 	}
 	b, _ := json.MarshalIndent(example, "", "  ")
 	return string(b)
+}
+
+// basslineExampleSteps returns a valid 16-step bassline motif (11 active, range A1-G3).
+func basslineExampleSteps() []schema.StepSpec {
+	return []schema.StepSpec{
+		{Active: true, Note: "A2", Accent: true},
+		{Active: true, Note: "A2"},
+		{Active: false},
+		{Active: true, Note: "E2", Slide: true},
+		{Active: true, Note: "A2", Accent: true},
+		{Active: false},
+		{Active: true, Note: "A2", Ghost: true},
+		{Active: true, Note: "E2"},
+		{Active: true, Note: "A2", Accent: true},
+		{Active: true, Note: "C3"},
+		{Active: false},
+		{Active: true, Note: "E2", Slide: true},
+		{Active: true, Note: "A2", Accent: true},
+		{Active: false},
+		{Active: false},
+		{Active: true, Note: "E2"},
+	}
+}
+
+// arpeggioExampleSteps returns a valid 16-step arpeggio motif (14 active, range C3-C6).
+func arpeggioExampleSteps() []schema.StepSpec {
+	return []schema.StepSpec{
+		{Active: true, Note: "A3", Legato: true},
+		{Active: true, Note: "E4"},
+		{Active: true, Note: "C5", Accent: true},
+		{Active: true, Note: "A4"},
+		{Active: true, Note: "E4", Legato: true},
+		{Active: true, Note: "A3"},
+		{Active: false},
+		{Active: true, Note: "E4"},
+		{Active: true, Note: "A4", Legato: true},
+		{Active: true, Note: "C5", Accent: true},
+		{Active: true, Note: "E5"},
+		{Active: true, Note: "A4"},
+		{Active: true, Note: "C5", Legato: true},
+		{Active: true, Note: "E4"},
+		{Active: false},
+		{Active: true, Note: "A4"},
+	}
+}
+
+// melodyExampleSteps returns a valid 16-step melody motif (7 active, range C4-C7).
+func melodyExampleSteps() []schema.StepSpec {
+	return []schema.StepSpec{
+		{Active: true, Note: "A4", Accent: true},
+		{Active: false},
+		{Active: true, Note: "E5"},
+		{Active: false},
+		{Active: true, Note: "C5", Legato: true},
+		{Active: false},
+		{Active: false},
+		{Active: true, Note: "A4"},
+		{Active: false},
+		{Active: false},
+		{Active: true, Note: "E5", Accent: true},
+		{Active: false},
+		{Active: true, Note: "A5"},
+		{Active: false},
+		{Active: true, Note: "E5", Legato: true},
+		{Active: false},
+	}
 }
 
 func progressionString(prog theory.ChordProgression) string {

@@ -69,6 +69,7 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 	w := midipkg.NewWriter(float64(req.BPM))
 	mg := generator.NewMultiGenerator(prov, v, reg, rend, w, outputDir)
 	mg.NoLLM = req.NoLLM || strings.EqualFold(req.Provider, "offline")
+	mg.Sequential = strings.EqualFold(req.Provider, "ollama")
 
 	parsedKey, err := theory.ParseKey(req.Key)
 	if err != nil {
@@ -100,6 +101,9 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 			return GenerateResult{}, fmt.Errorf("regen %s: %w", req.Track, err)
 		}
 		a.emitProgressStep("write", fmt.Sprintf("done - %d file written", len(result.Files)))
+		for _, w := range mg.Warnings() {
+			a.emitProgressStep("warn", w)
+		}
 		return GenerateResult{
 			Files:   result.Files,
 			Elapsed: time.Since(start).Round(time.Millisecond).String(),
@@ -155,6 +159,9 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 	}
 
 	a.emitProgressStep("write", fmt.Sprintf("done - %d files written", len(result.Files)))
+	for _, w := range mg.Warnings() {
+		a.emitProgressStep("warn", w)
+	}
 	slog.Info("desktop generation finished", "files", len(result.Files), "elapsed", time.Since(start).Round(time.Millisecond).String())
 
 	return GenerateResult{
@@ -303,6 +310,25 @@ func (a *AppService) ensureProviderReady(req GenerateRequest) error {
 		return fmt.Errorf("ollama is not ready: %s", status.Message)
 	}
 	return fmt.Errorf("%s is not ready: %s", req.Provider, status.Message)
+}
+
+func (a *AppService) GetOutputDir() string {
+	return a.defaultOutputDir()
+}
+
+func (a *AppService) ChooseOutputDir() (string, error) {
+	selected, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title:            "Choose MIDI Output Folder",
+		DefaultDirectory: a.defaultOutputDir(),
+	})
+	if err != nil {
+		return a.defaultOutputDir(), fmt.Errorf("directory dialog: %w", err)
+	}
+	if selected == "" {
+		return a.defaultOutputDir(), nil
+	}
+	a.outputDir = selected
+	return selected, nil
 }
 
 func (a *AppService) OpenOutputFolder() error {

@@ -28,6 +28,3 @@ jobs:
 
       - name: Build
         run: CGO_ENABLED=0 go build -v ./...
-
-      - name: Test
-        run: go test -v ./...

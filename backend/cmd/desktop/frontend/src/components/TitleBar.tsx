@@ -6,22 +6,15 @@ interface TitleBarProps {
   running: boolean
   logOpen: boolean
   onToggleLog: () => void
+  onToggleInfo: () => void
 }
 
-export function TitleBar({ provider, status, running, logOpen, onToggleLog }: TitleBarProps) {
+export function TitleBar({ provider, status, running, logOpen, onToggleLog, onToggleInfo }: TitleBarProps) {
   const ready = provider === 'offline' || status?.ready
   const statusText = running ? 'Generating' : ready ? 'Ready' : 'Setup needed'
 
   return (
     <header className="titlebar">
-      <div className="titlebar-brand">
-        <div className="brand-mark">CA</div>
-        <div>
-          <div className="app-name">Cadenza Desktop</div>
-          <div className="app-build">demo pre-release</div>
-        </div>
-      </div>
-
       <div className="titlebar-center">
         <span className={`status-dot ${ready ? 'ready' : 'warn'}`} />
         <span className="mono">{provider}</span>
@@ -30,6 +23,9 @@ export function TitleBar({ provider, status, running, logOpen, onToggleLog }: Ti
       </div>
 
       <div className="titlebar-actions">
+        <button type="button" className="icon-btn text" onClick={onToggleInfo}>
+          Info
+        </button>
         <button type="button" className="icon-btn text" onClick={onToggleLog}>
           {logOpen ? 'Hide log' : 'Show log'}
         </button>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { InfoModal } from './components/InfoModal'
 import { LogDrawer } from './components/LogDrawer'
 import { PianoRoll } from './components/PianoRoll'
 import { Sidebar } from './components/Sidebar'
@@ -30,13 +31,32 @@ export default function App() {
   const [running, setRunning] = useState(false)
   const [status, setStatus] = useState<ProviderStatus | null>(null)
   const [logOpen, setLogOpen] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [outputDir, setOutputDir] = useState('')
   const [lastSeed, setLastSeed] = useState('')
   const [pinnedSeed, setPinnedSeed] = useState('')
 
   useEffect(() => {
+    AppService.GetOutputDir().then((dir: string) => setOutputDir(dir)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const last = log[log.length - 1] ?? ''
-    if (last.startsWith('Error:')) setLogOpen(true)
+    if (last.startsWith('Error:') || last.includes('[warn]')) setLogOpen(true)
   }, [log])
+
+  const handleChooseOutputDir = async () => {
+    try {
+      const dir = await AppService.ChooseOutputDir()
+      if (dir) setOutputDir(dir)
+    } catch {}
+  }
+
+  const handleOpenOutputFolder = async () => {
+    try {
+      await AppService.OpenOutputFolder()
+    } catch {}
+  }
 
   useEffect(() => {
     if (filesAlt.length === 0) setAbView('a')
@@ -99,6 +119,7 @@ export default function App() {
         running={running}
         logOpen={logOpen}
         onToggleLog={() => setLogOpen(o => !o)}
+        onToggleInfo={() => setInfoOpen(o => !o)}
       />
 
       <main className="app-main">
@@ -117,6 +138,9 @@ export default function App() {
           setStatus={setStatus}
           pinnedSeed={pinnedSeed}
           setLastSeed={setLastSeed}
+          outputDir={outputDir}
+          onChooseOutputDir={handleChooseOutputDir}
+          onOpenOutputFolder={handleOpenOutputFolder}
         />
 
         <section className="workspace">
@@ -156,6 +180,7 @@ export default function App() {
         </section>
       </main>
 
+      <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} />
       <LogDrawer open={logOpen} log={log} files={displayFiles} />
       <StatusBar
         params={params}

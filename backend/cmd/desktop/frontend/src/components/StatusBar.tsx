@@ -23,8 +23,6 @@ export function StatusBar({ params, status, files, running, lastSeed, pinnedSeed
       <span>{params.key}</span>
       <span className="sb-sep">·</span>
       <span>{params.bars} bars</span>
-      <span className="sb-sep">·</span>
-      <span>{params.groove}</span>
 
       <span className="statusbar-fill" />
 

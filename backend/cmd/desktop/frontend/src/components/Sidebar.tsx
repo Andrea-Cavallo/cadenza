@@ -41,12 +41,16 @@ interface SidebarProps {
   setStatus: (s: ProviderStatus | null) => void
   pinnedSeed: string
   setLastSeed: (s: string) => void
+  outputDir: string
+  onChooseOutputDir: () => void
+  onOpenOutputFolder: () => void
 }
 
 export function Sidebar({
   params, setParams, setLog, setFiles, setFilesAlt, setPreview, setPreviewAlt, files,
   running, setRunning, status, setStatus,
   pinnedSeed, setLastSeed,
+  outputDir, onChooseOutputDir, onOpenOutputFolder,
 }: SidebarProps) {
   const {
     statusLoading, pulling, modelChoices, canGenerate,
@@ -203,6 +207,21 @@ export function Sidebar({
             </div>
           </div>
         </div>
+
+        <div className="sidebar-section">
+          <div className="panel-title">Output folder</div>
+          <div className="output-folder-path mono small" title={outputDir || 'Default output folder'}>
+            {outputDir ? basename(outputDir) : 'cadenza-output (default)'}
+          </div>
+          <div className="output-folder-actions">
+            <button type="button" className="btn ghost sb-action" onClick={onChooseOutputDir}>
+              Browse
+            </button>
+            <button type="button" className="btn ghost sb-action" onClick={onOpenOutputFolder}>
+              Open
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="sidebar-generate">
@@ -254,6 +273,10 @@ export function Sidebar({
       </div>
     </aside>
   )
+}
+
+function basename(p: string): string {
+  return p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? p
 }
 
 function providerStatusSummary(provider: string, status: ProviderStatus | null): string {

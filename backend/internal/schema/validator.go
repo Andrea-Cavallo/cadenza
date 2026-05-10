@@ -208,13 +208,13 @@ func (v *Validator) validateOptionalChordCoherence(spec *PatternSpec, prog *theo
 	return v.validateChordCoherence(spec, *prog)
 }
 
-// REFACTOR.md point 2: Differentiated chord coherence thresholds by pattern type
-// - bassline: 75% (bass is harmonic anchor)
-// - arpeggio: 80% (literally an arpeggio of chord notes)
-// - melody: 30% (legitimate use of passing tones)
+// Chord coherence thresholds by pattern type.
+// Arpeggio is 70% (not 80%) because with 4 active steps per section, 80% would require all 4
+// to be chord tones (3/4=75% < 80%), making one passing note always a hard failure.
+// 70% allows 3/4 chord tones (75% ≥ 70%), which is musically correct for a real arpeggio.
 var chordCoherenceThresholds = map[string]float64{
 	"bassline": 0.75,
-	"arpeggio": 0.80,
+	"arpeggio": 0.70,
 	"melody":   0.30,
 }
 
@@ -243,8 +243,8 @@ func (v *Validator) validateChordCoherence(spec *PatternSpec, prog theory.ChordP
 
 		if activeInSection >= 3 && !meetsChordThreshold(chordToneHits, activeInSection, threshold) {
 			ratio := float64(chordToneHits) / float64(activeInSection)
-			errs = append(errs, fmt.Sprintf("section %d (bars %d-%d): chord coherence %.0f%% < required %.0f%% for %s (found %d/%d chord tones of %s%s)",
-				i+1, chord.Bars[0], chord.Bars[1], ratio*100, threshold*100, spec.PatternType, chordToneHits, activeInSection, chord.Root, qualitySuffixValidator(chord.Quality)))
+			errs = append(errs, fmt.Sprintf("section %d (bars %d-%d): chord coherence %.0f%% < required %.0f%% for %s (found %d/%d chord tones of %s%s; chord tones: %s)",
+				i+1, chord.Bars[0], chord.Bars[1], ratio*100, threshold*100, spec.PatternType, chordToneHits, activeInSection, chord.Root, qualitySuffixValidator(chord.Quality), strings.Join(chordTones, ", ")))
 		}
 	}
 	return errs

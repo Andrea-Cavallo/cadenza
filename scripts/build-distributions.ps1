@@ -300,7 +300,7 @@ foreach ($pkg in $packages) {
     Copy-Item -Path (Join-Path $repoRoot "README.md") -Destination $stageDir -Force
     Copy-Item -Path (Join-Path $repoRoot "LICENSE") -Destination $stageDir -Force
 
-    $desktopExpected = (-not $SkipDesktop) -and ($DesktopPlatforms -contains $pkg.DesktopPlatform)
+    $desktopExpected = $desktopNote -like "Desktop app included*"
     Assert-PackageContents -StageDir $stageDir -PackageName $pkg.Name -DesktopExpected $desktopExpected
 
     $zipPath = Join-Path $distDir $pkg.Zip

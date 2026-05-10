@@ -70,6 +70,31 @@ jobs:
         shell: bash
         run: bash scripts/build-distributions.sh --version "${{ github.sha }}" --desktop-platforms "${{ matrix.platform }}" --skip-checks
 
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          APP_PATH="$(find dist/_stage/macos/desktop -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app found in dist/_stage/macos/desktop — skipping DMG"
+            exit 0
+          fi
+          echo "Creating DMG from: $APP_PATH"
+          hdiutil create \
+            -volname "Cadenza" \
+            -srcfolder "$APP_PATH" \
+            -ov -format UDZO \
+            "dist/cadenza-desktop-macos.dmg"
+          echo "DMG created: dist/cadenza-desktop-macos.dmg"
+
+      - name: Upload macOS DMG
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cadenza-desktop-macos-dmg
+          path: dist/cadenza-desktop-macos.dmg
+          if-no-files-found: warn
+
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
