@@ -48,10 +48,6 @@ Every `Generate` call produces seven MIDI files on separate channels, all derive
 
 A **StyleFamily** (`groove` / `rolling` / `sub`) drives density, articulation, and voicing coherently across all seven layers from a single selector.
 
-<p align="center">
-  <img src="cadenza%20arp.png" alt="Cadenza piano-roll — arpeggio and bass stems" width="640" />
-</p>
-
 ---
 
 ## Key Capabilities
@@ -101,10 +97,6 @@ Output goes to `./output/` by default. Seven `.mid` files appear in about one se
 ---
 
 ## Desktop App
-
-<p align="center">
-  <img src="cadenza1.png" alt="Cadenza desktop app — generator panel" width="640" />
-</p>
 
 The desktop app is a Wails v2 shell around the same Go engine. It runs natively on Windows, macOS, and Linux; the React UI calls Go methods directly with no HTTP layer in between.
 
@@ -186,14 +178,27 @@ export GEMINI_API_KEY=...
 
 #### Ollama
 
+Run entirely on-device — no API key, no internet, full privacy. The example below was generated with **Gemma** running locally via Ollama.
+
 <p align="center">
-  <img src="ollama.png" alt="Cadenza running with a local Ollama model" width="640" />
+  <img src="bass.png" alt="Bass stem — generated with Ollama + Gemma" width="640" /><br/>
+  <em>Bass groove stem — Ollama + Gemma</em>
+</p>
+
+<p align="center">
+  <img src="arp.png" alt="Arpeggio stem — generated with Ollama + Gemma" width="640" /><br/>
+  <em>Arpeggio stem — Ollama + Gemma</em>
+</p>
+
+<p align="center">
+  <img src="melody.png" alt="Melody stem — generated with Ollama + Gemma" width="640" /><br/>
+  <em>Melody stem — Ollama + Gemma</em>
 </p>
 
 ```bash
-ollama pull qwen2.5:7b   # one-time model download
+ollama pull gemma        # one-time model download
 ollama serve
-./bin/cadenza --bpm 126 --key Fm --provider ollama --model qwen2.5:7b
+./bin/cadenza --bpm 126 --key Fm --provider ollama --model gemma
 ```
 
 ---
