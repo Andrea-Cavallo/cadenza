@@ -13,10 +13,18 @@ func offlineTemplate(patternType string, musicCtx MusicContext) *schema.PatternS
 	switch patternType {
 	case "bassline":
 		return basslineTemplate(musicCtx)
+	case "bassline_rolling":
+		return basslineRolling(musicCtx)
+	case "bassline_sub":
+		return basslineSub(musicCtx)
 	case "arpeggio":
 		return arpeggioTemplate(musicCtx)
 	case "melody":
 		return melodyTemplate(musicCtx)
+	case "chord_pad":
+		return chordPadTemplate(musicCtx)
+	case "lead_stab":
+		return leadPluckTemplate(musicCtx)
 	}
 	return nil
 }
@@ -444,9 +452,10 @@ func basslineTemplate(ctx MusicContext) *schema.PatternSpec {
 }
 
 // fillBassSubPattern writes one 4-step bass groove into steps[base..base+3].
-// pattern 0-6 maps to distinct rhythmic/harmonic shapes.
+// Patterns 0-6: groove shapes. 7-11: rolling (R0-R4). 12-15: sub (S0-S3).
 func fillBassSubPattern(steps []schema.StepSpec, base int, pattern byte, root, fifth, color, highRoot, approach string, key theory.Key) {
 	switch pattern {
+	// ── Groove patterns (0-6) ────────────────────────────────────────────────
 	case 0: // driving: root-color-fifth-slide
 		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true}
 		steps[base+1] = schema.StepSpec{Active: true, Note: color}
@@ -477,18 +486,98 @@ func fillBassSubPattern(steps []schema.StepSpec, base int, pattern byte, root, f
 		steps[base+1] = schema.StepSpec{Active: true, Note: root, Accent: true}
 		steps[base+2] = schema.StepSpec{Active: true, Note: fifth, Ghost: true}
 		steps[base+3] = schema.StepSpec{Active: true, Note: root, Staccato: true}
-	default: // chromatic approach: accent-root-ghost approach-slide root
+	case 6: // chromatic approach: accent-root-ghost approach-slide root
 		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true}
 		steps[base+1] = schema.StepSpec{Active: true, Note: root}
 		steps[base+2] = schema.StepSpec{Active: true, Note: approach, Ghost: true}
 		steps[base+3] = schema.StepSpec{Active: true, Note: root, Slide: true}
+	// ── Rolling patterns R0-R4 (7-11) ────────────────────────────────────────
+	// All 4 steps active — groove from velocity variation, not rests.
+	case 7: // R0 acid pulse: root(acc+leg)-root(ghost+stacc)-fifth(slide)-root(ghost+stacc)
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true, Legato: true}
+		steps[base+1] = schema.StepSpec{Active: true, Note: root, Ghost: true, Staccato: true}
+		steps[base+2] = schema.StepSpec{Active: true, Note: fifth, Slide: true}
+		steps[base+3] = schema.StepSpec{Active: true, Note: root, Ghost: true, Staccato: true}
+	case 8: // R1 rolling ghost: root(acc)-root(ghost+stacc)-approach(ghost+slide)-root(slide)
+		// approach = diatonic note below root (approachNote function)
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true}
+		steps[base+1] = schema.StepSpec{Active: true, Note: root, Ghost: true, Staccato: true}
+		steps[base+2] = schema.StepSpec{Active: true, Note: approach, Ghost: true, Slide: true}
+		steps[base+3] = schema.StepSpec{Active: true, Note: root, Slide: true}
+	case 9: // R2 chromatic fill: root(acc+leg)-semitone_below(ghost+stacc)-root-fifth(ghost+slide)
+		chrApproach := chromaticApproachNote(root)
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true, Legato: true}
+		steps[base+1] = schema.StepSpec{Active: true, Note: chrApproach, Ghost: true, Staccato: true}
+		steps[base+2] = schema.StepSpec{Active: true, Note: root}
+		steps[base+3] = schema.StepSpec{Active: true, Note: fifth, Ghost: true, Slide: true}
+	case 10: // R3 octave stream: root(acc+leg)-highRoot(ghost+stacc)-root(ghost)-root(slide)
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true, Legato: true}
+		steps[base+1] = schema.StepSpec{Active: true, Note: highRoot, Ghost: true, Staccato: true}
+		steps[base+2] = schema.StepSpec{Active: true, Note: root, Ghost: true}
+		steps[base+3] = schema.StepSpec{Active: true, Note: root, Slide: true}
+	case 11: // R4 double root: root(acc)-root-root(ghost)-fifth(slide)
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true}
+		steps[base+1] = schema.StepSpec{Active: true, Note: root}
+		steps[base+2] = schema.StepSpec{Active: true, Note: root, Ghost: true}
+		steps[base+3] = schema.StepSpec{Active: true, Note: fifth, Slide: true}
+	// ── Sub patterns S0-S3 (12-15) ───────────────────────────────────────────
+	// Minimal density — silence is part of the sound.
+	case 12: // S0 long root: root(acc+leg)-rest-rest-rest
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true, Legato: true}
+		steps[base+1] = schema.StepSpec{Active: false}
+		steps[base+2] = schema.StepSpec{Active: false}
+		steps[base+3] = schema.StepSpec{Active: false}
+	case 13: // S1 held fifth: root(leg)-rest-fifth(leg)-rest
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Legato: true}
+		steps[base+1] = schema.StepSpec{Active: false}
+		steps[base+2] = schema.StepSpec{Active: true, Note: fifth, Legato: true}
+		steps[base+3] = schema.StepSpec{Active: false}
+	case 14: // S2 sub pulse: root(acc+leg)-rest-rest-root(ghost)
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true, Legato: true}
+		steps[base+1] = schema.StepSpec{Active: false}
+		steps[base+2] = schema.StepSpec{Active: false}
+		steps[base+3] = schema.StepSpec{Active: true, Note: root, Ghost: true}
+	default: // S3 dub slide: root(acc+leg)-rest-root(ghost+stacc)-fifth(slide)
+		steps[base+0] = schema.StepSpec{Active: true, Note: root, Accent: true, Legato: true}
+		steps[base+1] = schema.StepSpec{Active: false}
+		steps[base+2] = schema.StepSpec{Active: true, Note: root, Ghost: true, Staccato: true}
+		steps[base+3] = schema.StepSpec{Active: true, Note: fifth, Slide: true}
 	}
 }
 
-// ensureBassMaxDensity deactivates ghost/non-accent steps when the bassline
-// exceeds 13 active steps per 16-step section (the hard density limit).
-func ensureBassMaxDensity(steps []schema.StepSpec) {
-	const maxPerSection = 13
+// chromaticApproachNote returns the note one semitone below rootWithOctave (e.g. "A2" → "G#2").
+// Used by rolling pattern R2 for the acid chromatic approach.
+func chromaticApproachNote(rootWithOctave string) string {
+	midi, err := theory.NoteToMIDI(rootWithOctave)
+	if err != nil || midi <= 24 {
+		return rootWithOctave
+	}
+	return theory.MIDIToNote(midi - 1)
+}
+
+// chooseRollingPalette returns rolling sub-pattern indices (7-11 = R0-R4).
+func chooseRollingPalette(bpm float64, key theory.Key) []byte {
+	isMinor := key.Mode == "minor" || key.Mode == "dorian" || key.Mode == "phrygian"
+	if isMinor && bpm >= 126 {
+		return []byte{7, 8, 10, 11} // acid pulse, rolling ghost, octave stream, double root
+	}
+	if isMinor {
+		return []byte{7, 8, 9, 11} // acid pulse, rolling ghost, chromatic fill, double root
+	}
+	return []byte{7, 9, 10, 11} // acid pulse, chromatic fill, octave stream, double root
+}
+
+// chooseSubPalette returns sub sub-pattern indices (12-15 = S0-S3).
+func chooseSubPalette(bpm float64, key theory.Key) []byte {
+	if bpm < 120 {
+		return []byte{12, 14, 13} // long root, sub pulse, held fifth
+	}
+	return []byte{12, 15, 14} // long root, dub slide, sub pulse
+}
+
+// ensureBassMaxDensityBounded deactivates ghost/non-accent steps until each 16-step
+// section has at most maxPerSection active steps.
+func ensureBassMaxDensityBounded(steps []schema.StepSpec, maxPerSection int) {
 	sections := len(steps) / 16
 	for sec := 0; sec < sections; sec++ {
 		sl := steps[sec*16 : (sec+1)*16]
@@ -514,18 +603,18 @@ func ensureBassMaxDensity(steps []schema.StepSpec) {
 	}
 }
 
-// ensureBassMinDensity fills inactive off-beat slots with ghost notes until
-// each 16-step section has at least 8 active steps.
-func ensureBassMinDensity(steps []schema.StepSpec, prog theory.ChordProgression) {
-	const minPerSection = 8
+// ensureBassMinDensityBounded fills inactive off-beat slots with ghost notes until
+// each 16-step section has at least minPerSection active steps.
+func ensureBassMinDensityBounded(steps []schema.StepSpec, prog theory.ChordProgression, minPerSection int, octave string) {
 	for i, chord := range prog.Chords {
 		base := i * stepsPerSection
 		sl := steps[base : base+stepsPerSection]
+		ghostNote := chord.Root + octave
 		for activeStepCount(sl) < minPerSection {
 			filled := false
 			for off := 2; off < stepsPerSection; off += 4 {
 				if !sl[off].Active {
-					sl[off] = schema.StepSpec{Active: true, Note: chord.Root + "2", Ghost: true}
+					sl[off] = schema.StepSpec{Active: true, Note: ghostNote, Ghost: true}
 					filled = true
 					break
 				}
@@ -533,7 +622,7 @@ func ensureBassMinDensity(steps []schema.StepSpec, prog theory.ChordProgression)
 			if !filled {
 				for off := 1; off < stepsPerSection; off += 4 {
 					if !sl[off].Active {
-						sl[off] = schema.StepSpec{Active: true, Note: chord.Root + "2", Ghost: true}
+						sl[off] = schema.StepSpec{Active: true, Note: ghostNote, Ghost: true}
 						break
 					}
 				}
@@ -541,6 +630,18 @@ func ensureBassMinDensity(steps []schema.StepSpec, prog theory.ChordProgression)
 			}
 		}
 	}
+}
+
+// ensureBassMaxDensity deactivates ghost/non-accent steps when the bassline
+// exceeds 13 active steps per 16-step section (the hard density limit).
+func ensureBassMaxDensity(steps []schema.StepSpec) {
+	ensureBassMaxDensityBounded(steps, 13)
+}
+
+// ensureBassMinDensity fills inactive off-beat slots with ghost notes until
+// each 16-step section has at least 8 active steps.
+func ensureBassMinDensity(steps []schema.StepSpec, prog theory.ChordProgression) {
+	ensureBassMinDensityBounded(steps, prog, 8, "2")
 }
 
 // approachNote returns the diatonic scale degree immediately below the chord root.
@@ -558,6 +659,20 @@ func approachNote(root string, key theory.Key) string {
 		}
 	}
 	return root
+}
+
+// styleFamilyOfflineStyle maps StyleFamily to an offline style string (coeff. 70% for arp,
+// 30% for melody). When StyleFamily is unset, falls back to the legacy OfflineStyle.
+func styleFamilyOfflineStyle(sf StyleFamily, legacy string) string {
+	switch sf {
+	case StyleFamilyRolling:
+		return offlineStyleDriving
+	case StyleFamilySub:
+		return offlineStyleHypnotic
+	case StyleFamilyGroove:
+		return offlineStyleMelodic
+	}
+	return normalizeOfflineStyle(legacy)
 }
 
 func normalizeOfflineStyle(style string) string {
@@ -881,7 +996,7 @@ func arpeggioTemplate(ctx MusicContext) *schema.PatternSpec {
 
 	h := seedHash(seed + key.Root + key.Scale + "arp")
 	profileName := chooseArpProfile(key, bpm, h)
-	style := normalizeOfflineStyle(ctx.OfflineStyle)
+	style := styleFamilyOfflineStyle(ctx.StyleFamily, ctx.OfflineStyle)
 
 	steps := make([]schema.StepSpec, motifSteps)
 
@@ -1044,7 +1159,7 @@ func melodyTemplate(ctx MusicContext) *schema.PatternSpec {
 
 	h := seedHash(seed + key.Root + key.Scale + "melody")
 	profileName := chooseMelodyProfile(key, bpm, h)
-	style := normalizeOfflineStyle(ctx.OfflineStyle)
+	style := styleFamilyOfflineStyle(ctx.StyleFamily, ctx.OfflineStyle)
 
 	scaleNotes, _ := theory.ScaleNotes(key.Root, key.Scale)
 	if len(scaleNotes) < 7 {

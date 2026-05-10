@@ -15,15 +15,21 @@ type patternConstraints struct {
 }
 
 var constraintsByType = map[string]patternConstraints{
-	"bassline": {minMIDI: 33, maxMIDI: 55, minActive: 8, maxActive: 13},
-	"arpeggio": {minMIDI: 48, maxMIDI: 84, minActive: 12, maxActive: 16},
-	"melody":   {minMIDI: 60, maxMIDI: 96, minActive: 4, maxActive: 10},
+	"bassline":         {minMIDI: 33, maxMIDI: 55, minActive: 8, maxActive: 13},
+	"bassline_rolling": {minMIDI: 33, maxMIDI: 55, minActive: 14, maxActive: 16},
+	"bassline_sub":     {minMIDI: 24, maxMIDI: 43, minActive: 4, maxActive: 6},
+	"arpeggio":         {minMIDI: 48, maxMIDI: 84, minActive: 12, maxActive: 16},
+	"melody":           {minMIDI: 60, maxMIDI: 96, minActive: 4, maxActive: 10},
+	"chord_pad":        {minMIDI: 48, maxMIDI: 79, minActive: 2, maxActive: 6},
+	"lead_stab":        {minMIDI: 60, maxMIDI: 96, minActive: 1, maxActive: 8},
 }
 
 var validStyleProfiles = map[string]bool{
-	"bass_progressive": true, "bass_driving": true, "bass_sub": true,
+	"bass_progressive": true, "bass_driving": true, "bass_sub": true, "bass_rolling": true,
 	"arp_flowing": true, "arp_epic": true, "arp_staccato": true,
 	"melody_expressive": true, "melody_hypnotic": true,
+	"chord_pad_groove": true, "chord_pad_rolling": true, "chord_pad_sub": true,
+	"lead_stab": true,
 }
 
 var validEvolutionActions = map[string]bool{
@@ -75,7 +81,7 @@ func (v *Validator) validate(spec *PatternSpec, prog *theory.ChordProgression) e
 func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProgression, customBars int) error {
 	errs := validateMeta(spec, customBars)
 
-	constraints, ok, typeErr := constraintsFor(spec.PatternType)
+	constraints, ok, typeErr := constraintsForSpec(spec)
 	if !ok {
 		errs = append(errs, typeErr)
 		return fmt.Errorf("validation failed:\n- %s", strings.Join(errs, "\n- "))
@@ -91,6 +97,9 @@ func (v *Validator) validateCustomBars(spec *PatternSpec, prog *theory.ChordProg
 	errs = append(errs, validateAntiLoop(spec)...)
 	errs = append(errs, validateEvolution(spec.Evolution)...)
 	errs = append(errs, v.validateOptionalChordCoherence(spec, prog)...)
+	if isRollingBass(spec) {
+		errs = append(errs, validateRollingChromatics(spec)...)
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("validation failed:\n- %s", strings.Join(errs, "\n- "))
@@ -124,6 +133,94 @@ func constraintsFor(patternType string) (constraints patternConstraints, ok bool
 	return constraints, true, ""
 }
 
+// constraintsForSpec resolves constraints for a PatternSpec, overriding density bounds
+// by StyleProfile for rolling and sub bass variants that share PatternType "bassline".
+func constraintsForSpec(spec *PatternSpec) (constraints patternConstraints, ok bool, errMsg string) {
+	if spec.PatternType == "bassline" {
+		switch spec.StyleProfile {
+		case "bass_rolling":
+			if c, ok := constraintsByType["bassline_rolling"]; ok {
+				return c, true, ""
+			}
+		case "bass_sub":
+			if c, ok := constraintsByType["bassline_sub"]; ok {
+				return c, true, ""
+			}
+		}
+	}
+	return constraintsFor(spec.PatternType)
+}
+
+// isRollingBass returns true when this spec is a rolling-style bassline.
+func isRollingBass(spec *PatternSpec) bool {
+	return spec.PatternType == "bassline" && spec.StyleProfile == "bass_rolling"
+}
+
+// isChromaticApproach returns true if noteName is ±1 semitone from any note in the scale.
+func isChromaticApproach(noteName, key, scale string) bool {
+	midi, err := theory.NoteToMIDI(noteName + "1")
+	if err != nil {
+		return false
+	}
+	pc := midi % 12
+	scaleNotes, err := theory.ScaleNotes(key, scale)
+	if err != nil {
+		return false
+	}
+	for _, sn := range scaleNotes {
+		snMIDI, err2 := theory.NoteToMIDI(sn + "1")
+		if err2 != nil {
+			continue
+		}
+		diff := (pc - snMIDI%12 + 12) % 12
+		if diff == 1 || diff == 11 {
+			return true
+		}
+	}
+	return false
+}
+
+// validateRollingChromatics enforces: max 2 chromatic approach notes per 16-step section,
+// never on the section downbeat (step 0 of each section).
+func validateRollingChromatics(spec *PatternSpec) []string {
+	var errs []string
+	const sectionSize = 16
+	totalSteps := len(spec.Motif.Steps)
+
+	for sec := 0; sec*sectionSize < totalSteps; sec++ {
+		start := sec * sectionSize
+		end := start + sectionSize
+		if end > totalSteps {
+			end = totalSteps
+		}
+
+		chromaticCount := 0
+		for i := start; i < end; i++ {
+			step := spec.Motif.Steps[i]
+			if !step.Active || step.Note == "" {
+				continue
+			}
+			noteName := theory.NoteNameOnly(step.Note)
+			inScale, err := theory.NoteInScale(noteName, spec.Theory.Key, spec.Theory.Scale)
+			if err != nil || inScale {
+				continue
+			}
+			if !isChromaticApproach(noteName, spec.Theory.Key, spec.Theory.Scale) {
+				continue // invalid chromatic already reported by validateActiveStep
+			}
+			if i == start {
+				errs = append(errs, fmt.Sprintf("step[%d] chromatic note %s on downbeat (not allowed for bass_rolling)", i, step.Note))
+			}
+			chromaticCount++
+		}
+
+		if chromaticCount > 2 {
+			errs = append(errs, fmt.Sprintf("section %d: %d chromatic approach notes exceed the 2-per-section limit for bass_rolling", sec+1, chromaticCount))
+		}
+	}
+	return errs
+}
+
 func validateMotif(spec *PatternSpec, constraints patternConstraints) (errs []string, activeCount int) {
 	for i, step := range spec.Motif.Steps {
 		if !step.Active {
@@ -154,8 +251,10 @@ func validateActiveStep(spec *PatternSpec, constraints patternConstraints, index
 	noteName := theory.NoteNameOnly(step.Note)
 	inScale, err := theory.NoteInScale(noteName, spec.Theory.Key, spec.Theory.Scale)
 	if err == nil && !inScale {
-		errs = append(errs, fmt.Sprintf("step[%d] note %s not in %s %s scale",
-			index, step.Note, spec.Theory.Key, spec.Theory.Scale))
+		if !isRollingBass(spec) || !isChromaticApproach(noteName, spec.Theory.Key, spec.Theory.Scale) {
+			errs = append(errs, fmt.Sprintf("step[%d] note %s not in %s %s scale",
+				index, step.Note, spec.Theory.Key, spec.Theory.Scale))
+		}
 	}
 	return errs
 }

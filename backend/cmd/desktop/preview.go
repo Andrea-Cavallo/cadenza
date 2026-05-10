@@ -35,22 +35,28 @@ func buildChordPreview(prog theory.ChordProgression) []ChordPreview {
 }
 
 func buildTrackPreviews(specs map[string]*schema.PatternSpec) []TrackPreview {
-	order := []string{"bassline", "arpeggio", "melody"}
+	// Canonical display order: 3 bass tabs first, then arp, melody, pad, lead.
+	order := []string{
+		"bassline", "bassline_rolling", "bassline_sub",
+		"arpeggio", "melody", "chord_pad", "lead_stab",
+	}
+	seen := make(map[string]bool, len(order))
 	out := make([]TrackPreview, 0, len(specs))
 	for _, patternType := range order {
 		spec := specs[patternType]
 		if spec == nil {
 			continue
 		}
+		seen[patternType] = true
 		out = append(out, buildTrackPreview(patternType, spec))
 	}
-	if len(out) > 0 {
-		return out
-	}
 
+	// Include any extra pattern types not in the canonical order.
 	keys := make([]string, 0, len(specs))
 	for key := range specs {
-		keys = append(keys, key)
+		if !seen[key] {
+			keys = append(keys, key)
+		}
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
@@ -134,11 +140,19 @@ func previewVelocity(step schema.StepSpec) int {
 func previewLabel(patternType string) string {
 	switch patternType {
 	case "bassline":
-		return "Bass"
+		return "Bass Groove"
+	case "bassline_rolling":
+		return "Bass Rolling"
+	case "bassline_sub":
+		return "Bass Sub"
 	case "arpeggio":
 		return "Arp"
 	case "melody":
 		return "Melody"
+	case "chord_pad":
+		return "Chord Pad"
+	case "lead_stab":
+		return "Lead"
 	default:
 		return patternType
 	}

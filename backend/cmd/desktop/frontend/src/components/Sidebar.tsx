@@ -13,11 +13,10 @@ const KEYS = [
 ]
 const BARS_OPTS = [16, 32, 64, 128]
 const PROVIDERS = ['offline', 'claude', 'ollama', 'openai', 'gemini']
-const OFFLINE_STYLES = [
-  { id: 'melodic', label: 'Melodic' },
-  { id: 'hypnotic', label: 'Hypnotic' },
-  { id: 'driving', label: 'Driving' },
-  { id: 'minimal', label: 'Minimal' },
+const STYLE_FAMILIES = [
+  { id: 'groove' as const, label: 'Groove' },
+  { id: 'rolling' as const, label: 'Rolling' },
+  { id: 'sub' as const, label: 'Sub' },
 ]
 
 const PROVIDER_KEY_NAMES: Record<string, string> = {
@@ -169,18 +168,22 @@ export function Sidebar({
             )}
 
             {params.provider === 'offline' && (
-              <label className="sb-control provider-model secondary-control">
-                <span className="sb-label">Offline flavor</span>
-                <select
-                  value={params.style}
-                  onChange={e => setParams({ ...params, style: e.target.value })}
-                  disabled={running}
-                >
-                  {OFFLINE_STYLES.map(style => (
-                    <option key={style.id} value={style.id}>{style.label}</option>
+              <div className="sb-control secondary-control">
+                <span className="sb-label">Style family</span>
+                <div className="style-family-pills">
+                  {STYLE_FAMILIES.map(sf => (
+                    <button
+                      key={sf.id}
+                      type="button"
+                      className={`pill${params.styleFamily === sf.id ? ' on' : ''}`}
+                      onClick={() => setParams({ ...params, styleFamily: sf.id })}
+                      disabled={running}
+                    >
+                      {sf.label}
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
             )}
 
             <div className="provider-actions-grid">
@@ -246,16 +249,22 @@ export function Sidebar({
               Same harmony
             </button>
             <div className="qa-tracks">
-              {(['bassline', 'arpeggio', 'melody'] as const).map(track => (
+              {([
+                ['bassline', 'Bass'],
+                ['arpeggio', 'Arp'],
+                ['melody', 'Mel'],
+                ['chord_pad', 'Pad'],
+                ['lead_stab', 'Lead'],
+              ] as const).map(([track, label]) => (
                 <button
                   key={track}
                   type="button"
                   className="qa-btn"
-                  title={`Regenerate ${track} only`}
+                  title={`Regenerate ${label} only`}
                   onClick={() => handleRegenTrack(track)}
                   disabled={running}
                 >
-                  {track === 'bassline' ? 'Bass' : track === 'arpeggio' ? 'Arp' : 'Mel'}
+                  {label}
                 </button>
               ))}
               <button

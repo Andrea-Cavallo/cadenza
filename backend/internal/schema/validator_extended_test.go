@@ -257,3 +257,82 @@ func TestValidator_ValidArpeggio(t *testing.T) {
 		t.Fatalf("valid arpeggio should pass: %v", err)
 	}
 }
+
+// validRollingBassSpec returns a PatternSpec for bass_rolling: 16 active steps, all in A minor scale.
+func validRollingBassSpec() *PatternSpec {
+	// 4 distinct 4-step phrases to satisfy anti-loop check
+	notes := []string{
+		"A2", "E2", "G2", "D2",
+		"A2", "G2", "D2", "E2",
+		"A2", "D2", "E2", "B1",
+		"A2", "G2", "E2", "D2",
+	}
+	steps := make([]StepSpec, 16)
+	for i, n := range notes {
+		steps[i] = StepSpec{Active: true, Note: n}
+	}
+	return &PatternSpec{
+		SpecVersion:  "1.0",
+		PatternType:  "bassline",
+		Meta:         PatternMeta{BPM: 122, Key: "Am", Bars: 4},
+		Theory:       TheorySpec{Key: "A", Mode: "minor", Scale: "minor_natural"},
+		StyleProfile: "bass_rolling",
+		Motif:        MotifSpec{Length: 16, Steps: steps},
+		Evolution:    []EvolutionStep{{FromBar: 1, ToBar: 4, Action: "build", Intensity: 0.5}},
+	}
+}
+
+// TestValidator_RollingBass_DensityOverride verifies that 16 active steps pass for bass_rolling
+// (regular bassline allows max 13; the style-profile override lifts this to 16).
+func TestValidator_RollingBass_DensityOverride(t *testing.T) {
+	v := NewValidator()
+	spec := validRollingBassSpec()
+	if err := v.Validate(spec); err != nil {
+		t.Fatalf("rolling bass with 16 active steps should pass: %v", err)
+	}
+}
+
+// TestValidator_RollingBass_ChromaticExceptionAllowed verifies that a single chromatic
+// approach note (G#2, ±1 from G or A) not on the downbeat is accepted.
+func TestValidator_RollingBass_ChromaticExceptionAllowed(t *testing.T) {
+	v := NewValidator()
+	spec := validRollingBassSpec()
+	// G#2 = MIDI 44 — not in Am natural but ±1 from G2(43) and A2(45)
+	spec.Motif.Steps[1] = StepSpec{Active: true, Note: "Ab2"} // Ab2 = G#2
+	if err := v.Validate(spec); err != nil {
+		t.Fatalf("single chromatic approach at non-downbeat should be allowed: %v", err)
+	}
+}
+
+// TestValidator_RollingBass_ChromaticOnDownbeatFails verifies that a chromatic approach
+// note placed on the section downbeat (step 0) is rejected.
+func TestValidator_RollingBass_ChromaticOnDownbeatFails(t *testing.T) {
+	v := NewValidator()
+	spec := validRollingBassSpec()
+	spec.Motif.Steps[0] = StepSpec{Active: true, Note: "Ab2"} // chromatic on downbeat
+	err := v.Validate(spec)
+	if err == nil {
+		t.Fatal("chromatic approach on downbeat should fail")
+	}
+	if !strings.Contains(err.Error(), "downbeat") {
+		t.Fatalf("expected downbeat error, got: %v", err)
+	}
+}
+
+// TestValidator_RollingBass_TooManyChromatics verifies that more than 2 chromatic
+// approach notes in a single 16-step section are rejected.
+func TestValidator_RollingBass_TooManyChromatics(t *testing.T) {
+	v := NewValidator()
+	spec := validRollingBassSpec()
+	// Place 3 chromatic approach notes (all at non-downbeat positions)
+	spec.Motif.Steps[1] = StepSpec{Active: true, Note: "Ab2"}
+	spec.Motif.Steps[5] = StepSpec{Active: true, Note: "Ab2"}
+	spec.Motif.Steps[9] = StepSpec{Active: true, Note: "Ab2"}
+	err := v.Validate(spec)
+	if err == nil {
+		t.Fatal("3 chromatic notes in one section should fail")
+	}
+	if !strings.Contains(err.Error(), "exceed the 2-per-section limit") {
+		t.Fatalf("expected per-section limit error, got: %v", err)
+	}
+}

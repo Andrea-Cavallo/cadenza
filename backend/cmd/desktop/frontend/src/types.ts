@@ -4,6 +4,7 @@ export interface Params {
   bars: number
   groove: string
   style: string
+  styleFamily: 'groove' | 'rolling' | 'sub'
   provider: string
   model: string
   drums: boolean
@@ -18,6 +19,7 @@ export interface GenerateRequest {
   bars: number
   groove: string
   offlineStyle: string
+  styleFamily: string
   seed: string
   reuseChords: boolean
   track: string

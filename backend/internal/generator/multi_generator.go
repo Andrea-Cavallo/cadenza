@@ -35,7 +35,7 @@ type PatternResult struct {
 	NoteCount int
 }
 
-// GenerationResult is the output of a full 3-track generation session.
+// GenerationResult is the output of a full generation session (3 or 7 stems).
 type GenerationResult struct {
 	Files         []string
 	VariationSeed string
@@ -170,7 +170,24 @@ func (mg *MultiGenerator) GeneratePartWithContext(ctx context.Context, musicCtx 
 }
 
 func isKnownPatternType(patternType string) bool {
-	return patternType == "bassline" || patternType == "arpeggio" || patternType == "melody"
+	switch patternType {
+	case "bassline", "bassline_rolling", "bassline_sub",
+		"arpeggio", "melody", "chord_pad", "lead_stab":
+		return true
+	}
+	return false
+}
+
+// patternTypesForContext returns the ordered list of pattern types to generate.
+// Offline mode with StyleFamily set → 7 stems. LLM mode → 3 stems (bass/arp/melody).
+func patternTypesForContext(musicCtx MusicContext, noLLM bool) []string {
+	if noLLM && musicCtx.StyleFamily != "" {
+		return []string{
+			"bassline", "bassline_rolling", "bassline_sub",
+			"arpeggio", "melody", "chord_pad", "lead_stab",
+		}
+	}
+	return []string{"bassline", "arpeggio", "melody"}
 }
 
 func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicContext, varNum int) (*GenerationResult, error) {
@@ -184,11 +201,12 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 		"bpm", musicCtx.BPM,
 		"bars", musicCtx.Bars,
 		"groove", musicCtx.Groove,
+		"style_family", string(musicCtx.StyleFamily),
 		"seed", musicCtx.VariationSeed,
 		"no_llm", mg.NoLLM,
 	)
 
-	patternTypes := []string{"bassline", "arpeggio", "melody"}
+	patternTypes := patternTypesForContext(musicCtx, mg.NoLLM)
 	patterns := make(map[string]*schema.PatternSpec, len(patternTypes))
 
 	if mg.Sequential {
@@ -233,14 +251,24 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 			patterns[r.patternType] = r.spec
 		}
 	}
-	arrangementScore := schema.ScoreArrangement(patterns)
-	slog.Info("arrangement score",
-		"peak_section_by_track", arrangementScore.PeakSectionByTrack,
-		"all_tracks_peak_same_section", arrangementScore.AllTracksPeakSameSection,
-		"melody_arp_pitch_collision", arrangementScore.MelodyArpPitchCollision,
-		"melody_arp_register_collision", arrangementScore.MelodyArpRegisterCollision,
-		"warnings", arrangementScore.Warnings,
-	)
+
+	// Arrangement scoring only applies to the core 3-track set.
+	corePatterns := map[string]*schema.PatternSpec{}
+	for _, k := range []string{"bassline", "arpeggio", "melody"} {
+		if p, ok := patterns[k]; ok {
+			corePatterns[k] = p
+		}
+	}
+	if len(corePatterns) == 3 {
+		arrangementScore := schema.ScoreArrangement(corePatterns)
+		slog.Info("arrangement score",
+			"peak_section_by_track", arrangementScore.PeakSectionByTrack,
+			"all_tracks_peak_same_section", arrangementScore.AllTracksPeakSameSection,
+			"melody_arp_pitch_collision", arrangementScore.MelodyArpPitchCollision,
+			"melody_arp_register_collision", arrangementScore.MelodyArpRegisterCollision,
+			"warnings", arrangementScore.Warnings,
+		)
+	}
 
 	var outputFiles []string
 	keyStr := musicCtx.Key.Root
@@ -248,7 +276,7 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 		keyStr += "m"
 	}
 	for _, pt := range patternTypes {
-		path, err := mg.renderAndSave(pt, patterns[pt], keyStr, ts, varNum, musicCtx.BPM)
+		path, err := mg.renderAndSaveNamed(pt, patterns[pt], keyStr, ts, varNum, musicCtx.BPM)
 		if err != nil {
 			return nil, err
 		}
@@ -287,6 +315,60 @@ func (mg *MultiGenerator) renderAndSave(pt string, spec *schema.PatternSpec, key
 		suffix = fmt.Sprintf("_v%d", varNum)
 	}
 	filename := fmt.Sprintf("%s_%s_%s_%.0f_%s%s.mid", "output", pt, keyStr, bpm, ts, suffix)
+	outputPath := filepath.Join(mg.outputDir, filename)
+
+	if err := mg.writer.WriteFile(outputPath, events); err != nil {
+		return "", fmt.Errorf("%s write: %w", pt, err)
+	}
+	slog.Info("wrote MIDI", "file", outputPath, "events", len(events))
+	return outputPath, nil
+}
+
+// stemName maps internal pattern type identifiers to human-readable stem file names.
+func stemName(patternType string) string {
+	switch patternType {
+	case "bassline":
+		return "bassline-groove"
+	case "bassline_rolling":
+		return "bassline-rolling"
+	case "bassline_sub":
+		return "bassline-sub"
+	case "arpeggio":
+		return "arp"
+	case "melody":
+		return "melody"
+	case "chord_pad":
+		return "chord-pad"
+	case "lead_stab":
+		return "lead"
+	default:
+		return patternType
+	}
+}
+
+// renderAndSaveNamed is like renderAndSave but uses stem-specific file names for 7-stem bundles.
+func (mg *MultiGenerator) renderAndSaveNamed(pt string, spec *schema.PatternSpec, keyStr, ts string, varNum int, bpm float64) (string, error) {
+	profile, err := mg.registry.LoadForType(pt, spec.StyleProfile)
+	if err != nil {
+		slog.Debug("custom profile not found, using default", "type", pt, "requested", spec.StyleProfile, "error", err)
+		profile, err = mg.registry.DefaultForTypeExtended(pt)
+		if err != nil {
+			return "", fmt.Errorf("%s profile: %w", pt, err)
+		}
+	}
+	slog.Debug("rendering with profile", "type", pt, "profile", profile.Name, "bars", spec.Meta.Bars)
+
+	events, err := mg.renderer.Render(spec, profile)
+	if err != nil {
+		return "", fmt.Errorf("%s render: %w", pt, err)
+	}
+	slog.Debug("rendered", "type", pt, "events", len(events))
+
+	suffix := ""
+	if varNum > 1 {
+		suffix = fmt.Sprintf("_v%d", varNum)
+	}
+	filename := fmt.Sprintf("output_%s_%s_%.0f_%s%s.mid", stemName(pt), keyStr, bpm, ts, suffix)
 	outputPath := filepath.Join(mg.outputDir, filename)
 
 	if err := mg.writer.WriteFile(outputPath, events); err != nil {

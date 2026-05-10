@@ -1,6 +1,24 @@
 // @ts-ignore
 import * as AppService from '../../wailsjs/go/main/AppService'
 
+const STEM_LABELS: Record<string, string> = {
+  'bassline-groove': 'Bass Groove',
+  'bassline-rolling': 'Bass Rolling',
+  'bassline-sub': 'Bass Sub',
+  'arp': 'Arpeggio',
+  'melody': 'Melody',
+  'chord-pad': 'Chord Pad',
+  'lead': 'Lead',
+}
+
+function stemLabel(filePath: string): string {
+  const name = filePath.replace(/\\/g, '/').split('/').pop() ?? filePath
+  // output_<stem>_<key>_<bpm>_<ts>.mid
+  const m = name.match(/^output_([^_]+(?:-[^_]+)*)_/)
+  if (m) return STEM_LABELS[m[1]] ?? m[1]
+  return name.replace(/\.mid$/i, '')
+}
+
 interface LogDrawerProps {
   open: boolean
   log: string[]
@@ -28,13 +46,22 @@ export function LogDrawer({ open, log, files }: LogDrawerProps) {
       </div>
 
       <div className="files-panel">
-        <div className="panel-title">Output</div>
+        <div className="panel-title">Output stems</div>
         {files.length === 0 ? (
           <div className="empty-state">No MIDI files yet</div>
         ) : (
-          <div className="file-list">
+          <div className={`file-list${files.length >= 5 ? ' file-list-grid' : ''}`}>
             {files.map(file => (
-              <div key={file} className="file-row mono">{file}</div>
+              <button
+                key={file}
+                type="button"
+                className="file-row stem-btn"
+                title={file}
+                onClick={() => AppService.OpenOutputFolder()}
+              >
+                <span className="stem-label">{stemLabel(file)}</span>
+                <span className="stem-ext mono muted">.mid</span>
+              </button>
             ))}
           </div>
         )}

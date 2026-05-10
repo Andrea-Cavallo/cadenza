@@ -150,6 +150,7 @@ export function useGenerator({
     bars: p.bars,
     groove: p.groove,
     offlineStyle: p.style,
+    styleFamily: p.styleFamily || 'groove',
     seed: pinnedSeed || '',
     reuseChords: false,
     track: '',

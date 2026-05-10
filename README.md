@@ -1,209 +1,132 @@
-﻿# CADENZA
+# CADENZA
 
 <p align="center">
-  <img src="cadenza.png" alt="Cadenza" width="480" />
+  <img src="cadenza.png" alt="Cadenza — AI-powered MIDI generator" width="560" />
 </p>
 
 <p align="center">
-
-[![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://golang.org)
-[![CI](https://github.com/Andrea-Cavallo/cadenza/actions/workflows/ci.yml/badge.svg)](https://github.com/Andrea-Cavallo/cadenza/actions/workflows/ci.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![CGO_ENABLED=0](https://img.shields.io/badge/CGO-disabled-lightgrey)](https://pkg.go.dev/cmd/cgo)
-
+  <a href="https://golang.org"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go" alt="Go 1.25"/></a>
+  <a href="https://github.com/Andrea-Cavallo/cadenza/actions/workflows/ci.yml"><img src="https://github.com/Andrea-Cavallo/cadenza/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza"><img src="https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=alert_status" alt="Quality Gate"/></a>
+  <a href="https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza"><img src="https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=coverage" alt="Coverage"/></a>
+  <a href="https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza"><img src="https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=sqale_rating" alt="Maintainability"/></a>
+  <a href="https://sonarcloud.io/summary/new_code?id=Andrea-Cavallo_cadenza"><img src="https://sonarcloud.io/api/project_badges/measure?project=Andrea-Cavallo_cadenza&metric=security_rating" alt="Security"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License"/></a>
+  <img src="https://img.shields.io/badge/CGO-disabled-lightgrey" alt="CGO disabled"/>
 </p>
 
-> Three tracks. One key. One command.  
-> Drop them straight into your DAW — in under 2 seconds, without leaving the terminal.
-
-> Beta status: Cadenza is still in beta. The CLI and desktop app are usable, but prompts, presets, workflows, and output details may still evolve between releases.
+<p align="center">
+  <strong>BPM + Key → 7 production-ready MIDI stems, in under two seconds.</strong><br/>
+  Offline. Harmonically coherent. Drop-in ready for any DAW.
+</p>
 
 ---
 
-## Install
+## Overview
+
+Cadenza is an AI-powered MIDI generator written in Go. Feed it a tempo and a key; it produces a complete seven-stem bundle — bass groove, rolling bass, sub bass, arpeggio, melody, chord pad, and lead stab — all sharing the same chord progression and rendered with deterministic timing, velocity, gate, and automation rules tuned for progressive house and melodic techno.
+
+The engine runs entirely offline by default. No API call, no network, no cost. When you do want LLM creativity, Claude, Ollama, OpenAI, and Gemini are all supported with a single flag. If an LLM fails, the engine falls back to the offline templates silently — generation never aborts.
+
+The same engine powers a CLI, an HTTP API server, and a native desktop app (Wails v2) with a built-in piano-roll preview and per-stem download panel.
+
+---
+
+## 7-Stem Bundle
+
+Every `Generate` call produces seven MIDI files on separate channels, all derived from the same shared chord progression and style family:
+
+| Stem | Channel | Role | Offline density |
+|------|---------|------|----------------|
+| `bassline-groove.mid` | CH 1 | Rhythmic foundation — syncopated groove | 8 – 13 / 16 steps |
+| `bassline-rolling.mid` | CH 2 | Acid / TB-303 pulse — near-full density | 14 – 16 / 16 steps |
+| `bassline-sub.mid` | CH 3 | Deep sub — sparse, legato holds | 4 – 6 / 16 steps |
+| `arp.mid` | CH 4 | Chord arpeggio — melodic movement | 48 – 64 / 64 steps |
+| `melody.mid` | CH 5 | Lead melody — phrased motifs | 4 – 10 / 16 steps |
+| `chord-pad.mid` | CH 6 | Harmonic sustain — drop-2 voicings | 2 – 6 / 16 steps |
+| `lead.mid` | CH 7 | Staccato stab — percussive lead | 1 – 8 / 16 steps |
+
+A **StyleFamily** (`groove` / `rolling` / `sub`) drives density, articulation, and voicing coherently across all seven layers from a single selector.
+
+<p align="center">
+  <img src="cadenza%20arp.png" alt="Cadenza piano-roll — arpeggio and bass stems" width="640" />
+</p>
+
+---
+
+## Key Capabilities
+
+- **Fully offline** — `--no-llm` is a first-class mode, not a fallback. Zero API calls, deterministic output, CI-friendly.
+- **Harmonic coherence** — all stems share one chord progression; the validator enforces scale membership, range, density, and chord-tone ratios per section.
+- **Modal scale support** — Natural Minor, Major, Dorian, Phrygian, Mixolydian, Lydian are all equal citizens.
+- **Seed reproducibility** — every run prints a reproduce command. Same seed + key + BPM → identical output, always.
+- **LLM creativity on demand** — Claude (`tool_use`), Ollama (JSON schema), OpenAI, and Gemini. Retry with targeted correction prompts; 30-day SHA256-keyed disk cache.
+- **Genre presets** — `--preset progressive-warmup|peak-time-driver|afterhours-hypnotic|festival-melodic` pre-configure BPM, key, groove, and style.
+- **Post-run iteration** — same harmony, new motifs; regenerate one stem; A/B compare; faster / slower / busier / sparser without re-entering the flow.
+- **Static binaries** — `CGO_ENABLED=0`; cross-compile for Linux, macOS, and Windows from one machine.
+
+---
+
+## Modes at a Glance
+
+| Mode | Network | API key | Characteristics |
+|------|---------|---------|----------------|
+| **Offline** | No | No | Algorithmic, deterministic, < 2 s, excellent for production starters |
+| **Claude** | Yes | Yes | Structured output via `tool_use`; highest musical quality |
+| **Ollama** | No (post-pull) | No | Local LLM — privacy-first, no cost after model download |
+| **OpenAI** | Yes | Yes | Structured output mode |
+| **Gemini** | Yes | Yes | JSON mode |
+
+---
+
+## Quick Start
 
 ```bash
+# Install the CLI
 go install github.com/Andrea-Cavallo/cadenza/cmd/cadenza@latest
-```
 
-Then run immediately:
-
-```bash
+# Generate immediately — no API key required
 cadenza --bpm 122 --key Am --no-llm
 ```
 
----
-
-<p align="center">
-  <img src="cadenza1.png" alt="Cadenza" width="480" />
-</p>
-
-<p align="center">
-
-
-
-<p align="center">
-  <img src="ollama.png" alt="Cadenza" width="480" />
-</p>
-
-<p align="center">
-
-
-## Languages
-
-- [English](#english)
-- [Italiano](#italiano)
-- [Espanol](#espanol)
-
----
-
-## English
-
-### What does it sound like?
-
-Cadenza generates a **bassline**, an **arpeggio**, and a **melody** that all share the same chord progression. The result is a harmonically coherent sketch, ready to import at the correct BPM and layered for mixing.
-
-The patterns are designed for progressive house and melodic techno — hypnotic, rhythmically tight, and musically usable, not just technically valid.
-
-### Why Cadenza?
-
-No other Go CLI generates harmonically coherent multi-track MIDI from a single BPM + key input — offline, in under 2 seconds.
-
-Most MIDI tools either require a DAW, a plugin, or call an external API for every generation. Cadenza does not. Offline mode works entirely algorithmically: no API calls, no network, no cost, no latency. The result is deterministic, reproducible by seed, and musically varied.
-
-Key differentiators:
-- **Modal scale support** — not just major and minor. Dorian, Phrygian, Mixolydian, Lydian are all first-class.
-- **Genre presets** — `progressive-warmup`, `peak-time-driver`, `afterhours-hypnotic`, `festival-melodic` pre-fill BPM, key, groove, and style with one flag.
-- **Seed reproducibility** — every run prints a reproduce command. Paste it tomorrow and get the exact same patterns.
-- **Post-run iteration** — same harmony with new motifs, A/B compare, faster/slower/busier/sparser without re-entering the flow.
-
-### Producer Workflow
-
-A typical Cadenza session looks like this:
-
-```
-1.  cadenza                           # start interactive mode
-    → pick a genre preset, or configure manually
-    → choose key, energy level, BPM
-    → confirm and render
-
-2.  Import all 3 MIDI files into DAW at the printed BPM.
-    Assign instruments: bass synth, pluck/pad, lead.
-
-3.  In the terminal, keep iterating:
-    [3] Same harmony, new motifs      # re-rolls motifs, keeps chord progression
-    [5] Faster (+6 BPM)               # nudges energy up
-    [4] A/B compare                   # generates two variations in A/ and B/ folders
-
-4.  Found something you like? Copy the Reproduce command from the output.
-    Run it later, in CI, or in a script to recreate the exact same patterns.
-```
-
-### Offline mode is a core feature
-
-`--no-llm` is not an emergency fallback. It is one of the strongest parts of the project.
-
-Offline mode:
-
-- makes zero API calls
-- generates musically useful, hypnotic patterns algorithmically
-- supports all four offline sub-modes: `hypnotic`, `driving`, `minimal`, `melodic`
-- keeps harmonic coherence, timing, velocity, and renderer quality
-- is fast, reproducible, cheap, and reliable in CI, Docker, and local workflows
-
-### Features
-
-- One command, three MIDI files
-- Shared chord progression across bassline, arpeggio, and melody
-- Modal scale support: Natural Minor, Major, Dorian, Phrygian, Mixolydian, Lydian
-- Genre presets: `--preset progressive-warmup|peak-time-driver|afterhours-hypnotic|festival-melodic`
-- Offline style sub-modes: `--offline-style hypnotic|driving|minimal|melodic`
-- Energy selector (1–5) in interactive mode
-- Post-run iteration: same harmony, same motifs in a new key, regenerate one part, lock progression, A/B compare, faster/slower/busier/sparser
-- Desktop app: Wails-powered local GUI with direct Go bindings, no REST layer required
-- Script integration: `--json`, `--non-interactive`, and `cadenza config init`
-- Reproduce command printed after every run
-- Deterministic renderer with timing, velocity, gate, sweep, and portamento rules
-- Claude, Ollama, OpenAI, and Gemini support
-- Graceful fallback to offline templates if an LLM fails
-- LLM response cache (30-day TTL, SHA256-keyed)
-- Static binaries with `CGO_ENABLED=0`
-
-### Requirements
-
-To use the project after cloning, you need:
-
-- Go `1.25`
-- Git
-- Optional: `make`
-- Optional: Wails CLI + Node.js for the desktop app
-- Optional: Ollama for local LLM mode
-
-### Beta and logs
-
-Cadenza is currently in **beta**. That means the project is already usable for sketching and iteration, but we still expect ongoing changes in UX, defaults, and musical behavior.
-
-If you are troubleshooting a run, the CLI writes application logs under the selected output directory:
-
-- default path after running from `backend/`: `backend/output/logs/cadenza.log`
-- general rule: `<output-dir>/logs/cadenza.log`
-
-If you override the output directory, the logs follow that folder. If you configure an absolute log path manually, that explicit path is used instead.
-
-### Desktop app
-
-The desktop app is a Wails v2 shell around the same Go engine. It runs as a native Windows/macOS/Linux app and calls Go methods directly from the React UI; there is no HTTP service between the GUI and the generator.
-The provider panel checks whether API keys are configured, whether Ollama is installed and running, and which local Ollama models are available before generation starts.
-The current beta desktop workflow is intentionally minimal: choose provider, key/mode, BPM, bars, then generate. Genre presets are not part of the desktop sidebar; they remain a CLI workflow only. When Offline is selected, a compact secondary `Offline flavor` control exposes `melodic`, `hypnotic`, `driving`, and `minimal` because those modes produce measurably different PatternSpecs.
-
-```bash
-cd backend
-make desktop-dev      # live desktop dev mode
-make desktop          # Wails Windows build
-make desktop-manual   # npm install + npm run build + Go production build
-```
-
-`make desktop-manual` follows the Wails manual build flow: install frontend dependencies, build the Vite frontend, then compile Go with Wails production tags and Windows GUI ldflags.
-If `wails` is not on your PATH, run `make desktop WAILS=/path/to/wails`.
-
-To create local ZIP distributions from PowerShell:
-
-```powershell
-.\scripts\build-distributions.ps1 -Clean
-```
-
-The script writes Windows, macOS, and Linux packages to `dist/`. CLI binaries are cross-compiled for every package; Wails desktop binaries are included when the requested desktop platform can be built from the current machine.
-- Optional: API keys for Claude, OpenAI, or Gemini
-
-Check your Go version:
-
-```bash
-go version
-```
-
-### Install (one-liner)
-
-```bash
-go install github.com/Andrea-Cavallo/cadenza/cmd/cadenza@latest
-cadenza --bpm 122 --key Am --no-llm
-```
-
-### Use it immediately without building
-
-If you just cloned the repo and want to try it right away:
+Or run directly from the cloned repo:
 
 ```bash
 cd backend
 go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 ```
 
-In interactive mode, choose a genre preset or configure manually. The energy selector and key mood description guide tempo and style choices.
+Output goes to `./output/` by default. Seven `.mid` files appear in about one second.
 
-### Build after cloning
+---
+
+## Desktop App
+
+<p align="center">
+  <img src="cadenza1.png" alt="Cadenza desktop app — generator panel" width="640" />
+</p>
+
+The desktop app is a Wails v2 shell around the same Go engine. It runs natively on Windows, macOS, and Linux; the React UI calls Go methods directly with no HTTP layer in between.
+
+**Features:**
+- Provider panel — detects API keys, checks Ollama availability, lists installed local models
+- StyleFamily selector (`Groove` / `Rolling` / `Sub`) replaces the old flavor dropdown in offline mode
+- Per-stem piano-roll preview with tabbed navigation across all seven stems
+- Download panel with individual stem buttons and click-to-open-folder
+- Quick-action regen buttons per stem (Bass, Arp, Mel, Pad, Lead, A/B) — same harmony, new motif
+
+```bash
+cd backend
+make desktop-dev      # live Wails dev mode (hot reload)
+make desktop          # production Windows build
+make desktop-manual   # npm install + Vite build + Go production compile
+```
+
+---
+
+## Build from Source
+
+**Requirements:** Go 1.25, Git. Optional: `make`, Wails CLI + Node.js for the desktop app.
 
 #### Windows (PowerShell)
 
@@ -214,7 +137,7 @@ go build -o bin/cadenza.exe ./cmd/cadenza/
 .\bin\cadenza.exe --bpm 122 --key Am --no-llm
 ```
 
-#### macOS
+#### macOS / Linux
 
 ```bash
 git clone https://github.com/Andrea-Cavallo/cadenza
@@ -223,48 +146,24 @@ go build -o bin/cadenza ./cmd/cadenza/
 ./bin/cadenza --bpm 122 --key Am --no-llm
 ```
 
-#### Linux
+#### Cross-compile all platforms
 
 ```bash
-git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza/backend
-go build -o bin/cadenza ./cmd/cadenza/
-./bin/cadenza --bpm 122 --key Am --no-llm
+make build-all
 ```
 
-Output goes to `./output/` by default.
+Produces `bin/cadenza-{linux,darwin,windows}-{amd64,arm64}` in one pass.
 
-### Run with hosted LLMs
+---
 
-### Power User CLI
-
-```bash
-cadenza config init
-cadenza --bpm 122 --key Am --no-llm --json --non-interactive
-```
-
-`--json` prints one machine-readable generation summary per variation. `cadenza config init` creates an annotated starter `cadenza.yaml` in the current directory.
-
-### Representative MIDI Examples
-
-Local example MIDI sets are generated under `output/examples/`:
-
-```bash
-cadenza --bpm 122 --key Am --no-llm --output output/examples/am_122
-cadenza --bpm 128 --key Dm-dorian --no-llm --output output/examples/dm_dorian_128
-cadenza --bpm 124 --key G-mixolydian --no-llm --output output/examples/g_mixolydian_124
-```
+## Run with LLMs
 
 #### Claude
-
-macOS / Linux:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ./bin/cadenza --bpm 122 --key Am
 ```
-
-Windows PowerShell:
 
 ```powershell
 $env:ANTHROPIC_API_KEY="sk-ant-..."
@@ -273,378 +172,123 @@ $env:ANTHROPIC_API_KEY="sk-ant-..."
 
 #### OpenAI
 
-macOS / Linux:
-
 ```bash
 export OPENAI_API_KEY=sk-...
 ./bin/cadenza --bpm 124 --key Em --provider openai
-```
-
-Windows PowerShell:
-
-```powershell
-$env:OPENAI_API_KEY="sk-..."
-.\bin\cadenza.exe --bpm 124 --key Em --provider openai
 ```
 
 #### Gemini
 
-macOS / Linux:
-
 ```bash
 export GEMINI_API_KEY=...
 ./bin/cadenza --bpm 128 --key Dm --provider gemini
 ```
 
-Windows PowerShell:
+#### Ollama
 
-```powershell
-$env:GEMINI_API_KEY="..."
-.\bin\cadenza.exe --bpm 128 --key Dm --provider gemini
-```
-
-### Run with Ollama
-
-1. Install Ollama from [ollama.com](https://ollama.com)
-2. Pull a model:
+<p align="center">
+  <img src="ollama.png" alt="Cadenza running with a local Ollama model" width="640" />
+</p>
 
 ```bash
-ollama pull qwen2.5:7b
-```
-
-3. Start the server:
-
-```bash
-ollama serve
-```
-
-4. Run Cadenza:
-
-macOS / Linux:
-
-```bash
-./bin/cadenza --bpm 126 --key Fm --provider ollama --model qwen2.5:7b
-```
-
-Windows PowerShell:
-
-```powershell
-.\bin\cadenza.exe --bpm 126 --key Fm --provider ollama --model qwen2.5:7b
-```
-
-### Useful commands
-
-```bash
-make build
-make build-all
-make test
-make test-race
-make test-coverage
-make ci
-```
-
-### Cross-platform release builds
-
-If you want binaries for all supported platforms:
-
-```bash
-make build-all
-```
-
-This creates:
-
-- `bin/cadenza-linux-amd64`
-- `bin/cadenza-linux-arm64`
-- `bin/cadenza-darwin-amd64`
-- `bin/cadenza-darwin-arm64`
-- `bin/cadenza-windows-amd64.exe`
-- `bin/cadenza-windows-arm64.exe`
-
-### Modes at a glance
-
-| Mode | Internet | API Key | Notes |
-|---|---|---|---|
-| Offline | No | No | Fast, algorithmic, reliable, excellent for sketches and production starters |
-| Claude | Yes | Yes | Default hosted LLM mode |
-| Ollama | No (after model download) | No | Local LLM mode |
-| OpenAI | Yes | Yes | Structured output mode |
-| Gemini | Yes | Yes | JSON mode |
-
-### Why `CGO_ENABLED=0`
-
-The project is intentionally built as a pure Go application with static binaries and minimal runtime dependencies. That keeps builds portable and makes CI, Docker, and cross-compilation simpler.
-
----
-
-## Italiano
-
-### Cos'e Cadenza?
-
-Cadenza trasforma BPM e tonalita in tre file MIDI: bassline, arpeggio e melodia. Tutte e tre le parti condividono la stessa progressione armonica, quindi il risultato e coerente e pronto da importare nella DAW.
-
-Il progetto puo usare un LLM, ma uno dei suoi punti forti principali e che funziona molto bene anche senza LLM.
-
-### La modalita offline e un punto di forza
-
-`--no-llm` non e un ripiego. E una delle forze principali del progetto.
-
-La modalita offline:
-
-- non usa API
-- genera pattern utili in modo algoritmico
-- mantiene coerenza armonica, timing, velocity e qualita del renderer
-- e veloce, riproducibile, economica e affidabile
-
-### Requisiti
-
-Dopo il clone servono:
-
-- Go `1.25`
-- Git
-- opzionale: `make`
-- opzionale: Ollama per la modalita LLM locale
-- opzionale: chiavi API per Claude, OpenAI o Gemini
-
-### Beta e log
-
-Cadenza e ancora in **beta**. Si puo gia usare davvero, ma UX, preset, workflow e dettagli dell'output possono ancora cambiare tra una release e l'altra.
-
-Per capire cosa succede dietro le quinte, la CLI scrive i log applicativi dentro la cartella di output:
-
-- percorso di default se lanci da `backend/`: `backend/output/logs/cadenza.log`
-- regola generale: `<output-dir>/logs/cadenza.log`
-
-Se cambi la cartella di output, i log seguono quella cartella. Se invece imposti manualmente un path assoluto per il file di log, viene usato quello.
-
-### Provarlo subito senza build
-
-```bash
-cd backend
-go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
-```
-
-### Compilazione dopo il clone
-
-#### Windows (PowerShell)
-
-```powershell
-git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza/backend
-go build -o bin/cadenza.exe ./cmd/cadenza/
-.\bin\cadenza.exe --bpm 122 --key Am --no-llm
-```
-
-#### macOS
-
-```bash
-git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza/backend
-go build -o bin/cadenza ./cmd/cadenza/
-./bin/cadenza --bpm 122 --key Am --no-llm
-```
-
-#### Linux
-
-```bash
-git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza/backend
-go build -o bin/cadenza ./cmd/cadenza/
-./bin/cadenza --bpm 122 --key Am --no-llm
-```
-
-L'output va in `./output/`.
-
-### Provider hosted e locali
-
-Claude:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-./bin/cadenza --bpm 122 --key Am
-```
-
-Windows PowerShell:
-
-```powershell
-$env:ANTHROPIC_API_KEY="sk-ant-..."
-.\bin\cadenza.exe --bpm 122 --key Am
-```
-
-OpenAI:
-
-```bash
-export OPENAI_API_KEY=sk-...
-./bin/cadenza --bpm 124 --key Em --provider openai
-```
-
-Gemini:
-
-```bash
-export GEMINI_API_KEY=...
-./bin/cadenza --bpm 128 --key Dm --provider gemini
-```
-
-Ollama:
-
-```bash
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:7b   # one-time model download
 ollama serve
 ./bin/cadenza --bpm 126 --key Fm --provider ollama --model qwen2.5:7b
-```
-
-### Comandi utili
-
-```bash
-make build
-make build-all
-make test
-make test-race
-make test-coverage
-make ci
 ```
 
 ---
 
-## Espanol
+## Producer Workflow
 
-### Que es Cadenza?
-
-Cadenza convierte BPM y tonalidad en tres archivos MIDI: bassline, arpegio y melodia. Las tres partes comparten la misma progresion armonica, asi que el resultado sale coherente y listo para llevar a una DAW.
-
-El proyecto puede usar un LLM, pero una de sus mayores fortalezas es que funciona muy bien incluso sin LLM.
-
-### El modo offline es una fortaleza real
-
-`--no-llm` no es un plan B. Es una parte fuerte del proyecto.
-
-El modo offline:
-
-- no hace llamadas API
-- genera patrones utiles de forma algoritmica
-- mantiene coherencia armonica, timing, velocity y calidad del renderer
-- es rapido, reproducible, barato y fiable
-
-### Requisitos
-
-Despues de clonar el repo necesitas:
-
-- Go `1.25`
-- Git
-- opcional: `make`
-- opcional: Ollama para modo LLM local
-- opcional: claves API para Claude, OpenAI o Gemini
-
-### Beta y logs
-
-Cadenza sigue en **beta**. Ya se puede usar de verdad, pero la UX, los presets, los flujos y algunos detalles del output todavia pueden cambiar entre versiones.
-
-Para entender que esta pasando por detras, la CLI escribe los logs de la aplicacion dentro de la carpeta de salida:
-
-- ruta por defecto si ejecutas desde `backend/`: `backend/output/logs/cadenza.log`
-- regla general: `<output-dir>/logs/cadenza.log`
-
-Si cambias la carpeta de salida, los logs van con esa carpeta. Si defines manualmente una ruta absoluta para el log, se usa esa ruta explicitamente.
-
-### Probarlo sin compilar
-
-```bash
-cd backend
-go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
 ```
+1.  cadenza                               # interactive mode
+    → pick a genre preset, or set BPM/key/style manually
+    → confirm and render
 
-### Compilar despues del clone
+2.  Import all 7 MIDI stems into your DAW at the printed BPM.
+    Assign instruments: sub synth, bass, acid line, pad, arp, lead, stab.
 
-#### Windows (PowerShell)
+3.  Iterate in the terminal without leaving the session:
+    [3] Same harmony, new motifs          # fresh motifs, same chord progression
+    [5] Faster (+6 BPM)                   # nudge energy up
+    [4] A/B compare                       # two variations in A/ and B/ folders
 
-```powershell
-git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza/backend
-go build -o bin/cadenza.exe ./cmd/cadenza/
-.\bin\cadenza.exe --bpm 122 --key Am --no-llm
-```
-
-#### macOS
-
-```bash
-git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza/backend
-go build -o bin/cadenza ./cmd/cadenza/
-./bin/cadenza --bpm 122 --key Am --no-llm
-```
-
-#### Linux
-
-```bash
-git clone https://github.com/Andrea-Cavallo/cadenza
-cd cadenza/backend
-go build -o bin/cadenza ./cmd/cadenza/
-./bin/cadenza --bpm 122 --key Am --no-llm
-```
-
-La salida va a `./output/`.
-
-### Usar proveedores
-
-Claude:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-./bin/cadenza --bpm 122 --key Am
-```
-
-OpenAI:
-
-```bash
-export OPENAI_API_KEY=sk-...
-./bin/cadenza --bpm 124 --key Em --provider openai
-```
-
-Gemini:
-
-```bash
-export GEMINI_API_KEY=...
-./bin/cadenza --bpm 128 --key Dm --provider gemini
-```
-
-Ollama:
-
-```bash
-ollama pull qwen2.5:7b
-ollama serve
-./bin/cadenza --bpm 126 --key Fm --provider ollama --model qwen2.5:7b
-```
-
-### Comandos utiles
-
-```bash
-make build
-make build-all
-make test
-make test-race
-make test-coverage
-make ci
+4.  Copy the Reproduce line from the output to recreate the exact session later.
 ```
 
 ---
 
 ## Architecture
 
-```text
-User (BPM + Key)
-  -> Key parser
-  -> Shared chord progression
-  -> Musical plan (style card, tension curve, motif intent)
-  -> Parallel generators (bassline, arpeggio, melody)
-  -> Critic + one targeted revision round when needed
-  -> Validator + musical scoring
-  -> Renderer
-  -> 3 MIDI files
 ```
+User (BPM + Key + StyleFamily)
+  → Key parser
+  → Chord progression (4 chords, shared across all stems)
+  → Parallel generators × 7:
+      bassline-groove · bassline-rolling · bassline-sub
+      arpeggio · melody · chord-pad · lead-stab
+  → Validator (scale · range · density · chord coherence per section)
+  → StyleProfile → Renderer (timing · velocity · gate · CC automation · portamento)
+  → 7 MIDI Type-0 files
+```
+
+The LLM owns motif creativity. The renderer owns all timing and dynamics. The validator enforces musical invariants. StyleFamily drives offline articulation coherently across all seven layers with zero extra latency.
+
+---
+
+## Useful Commands
+
+```bash
+make build          # compile CLI for current platform
+make build-all      # cross-compile all platforms
+make test           # unit tests
+make test-race      # race-detector pass
+make test-coverage  # coverage report
+make ci             # full local CI: fmt → vet → lint → vuln → coverage
+```
+
+---
+
+## Beta
+
+Cadenza is in **beta**. The CLI and desktop app are actively used for sketching and production iteration, but prompts, presets, and musical defaults may still evolve between releases.
+
+Application logs are written to `<output-dir>/logs/cadenza.log` (default: `backend/output/logs/cadenza.log`).
+
+---
+
+## Italiano
+
+Cadenza trasforma BPM e tonalità in sette stem MIDI: bassline groove, bassline rolling, bassline sub, arpeggio, melodia, chord pad e lead stab. Tutti condividono la stessa progressione armonica e il parametro **StyleFamily** (`groove` / `rolling` / `sub`) calibra densità e articolazione di ogni layer in modo coerente.
+
+La modalità offline (`--no-llm`) è un punto di forza del progetto, non un ripiego: genera pattern ipnotici e musicalmente utili senza chiamate API, con risultati deterministici e riproducibili per seed.
+
+```bash
+cd backend && go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
+```
+
+---
+
+## Español
+
+Cadenza convierte BPM y tonalidad en siete stems MIDI: bassline groove, bassline rolling, bassline sub, arpegio, melodía, chord pad y lead stab. Todos comparten la misma progresión armónica; el parámetro **StyleFamily** (`groove` / `rolling` / `sub`) coordina densidad y articulación de cada capa de forma coherente.
+
+El modo offline (`--no-llm`) es una fortaleza real del proyecto: genera patrones hipnóticos y musicalmente útiles sin llamadas API, con resultados deterministas y reproducibles por seed.
+
+```bash
+cd backend && go run ./cmd/cadenza/ --bpm 122 --key Am --no-llm
+```
+
+---
 
 ## Repository Notes
 
-- Go version: `1.25`
-- Module path: `github.com/Andrea-Cavallo/cadenza`
-- Default CLI entry point: `./cmd/cadenza/`
-- Default output directory: `./output/`
-- Offline mode is a first-class workflow, not a degraded one
+| Property | Value |
+|----------|-------|
+| Go version | 1.25 |
+| Module path | `github.com/Andrea-Cavallo/cadenza` |
+| CLI entry point | `./cmd/cadenza/` |
+| Desktop entry point | `./cmd/desktop/` |
+| Default output | `./output/` |
+| CGO | disabled |
+| Offline mode | first-class, not degraded |

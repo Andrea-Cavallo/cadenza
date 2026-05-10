@@ -131,6 +131,7 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 		ChordProgression: prog,
 		Groove:           req.Groove,
 		OfflineStyle:     req.OfflineStyle,
+		StyleFamily:      generator.StyleFamily(req.StyleFamily),
 	}
 	a.lastMusicCtx = &musicCtx
 
@@ -147,6 +148,7 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 		"bars", req.Bars,
 		"groove", req.Groove,
 		"offline_style", req.OfflineStyle,
+		"style_family", req.StyleFamily,
 		"seed", seed,
 		"reuse_chords", req.ReuseChords,
 	)
@@ -371,6 +373,9 @@ func normalizeGenerateRequest(req GenerateRequest) GenerateRequest {
 	}
 	if req.OfflineStyle == "" || req.OfflineStyle == "-" || req.OfflineStyle == "—" {
 		req.OfflineStyle = "melodic"
+	}
+	if req.StyleFamily == "" {
+		req.StyleFamily = "groove"
 	}
 	return req
 }

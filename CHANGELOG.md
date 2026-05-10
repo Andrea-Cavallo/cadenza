@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **7-stem offline bundle**: offline mode now generates all 7 stems in parallel — Bass Groove, Bass Rolling, Bass Sub, Arp, Melody, Chord Pad, Lead. Output files named `output_bassline-groove_*.mid`, `output_bassline-rolling_*.mid`, `output_bassline-sub_*.mid`, `output_arp_*.mid`, `output_melody_*.mid`, `output_chord-pad_*.mid`, `output_lead_*.mid`.
+- **Rolling bassline (TB-303/acid)**: `basslineRolling` generates near-full density (14-16/16 active steps) patterns using 5 rolling sub-patterns (R0-R4) including acid pulse, chromatic fill, octave stream, and double-root phrases. Groove comes from velocity variation rather than rests.
+- **Sub bassline (dub/deep techno)**: `basslineSub` generates sparse low-register patterns (4-6/16 active steps) using 4 sub-patterns (S0-S3) in octave 1 (MIDI 24-43) with legato holds.
+- **Chord Pad layer (CH6)**: `chordPadTemplate` produces sustain drop-2 voicings (root3+fifth4+third5) that adapt density and octave to StyleFamily — 4 downbeat hits for Groove, 2 minimal hits for Rolling, 6 low-register hits for Sub.
+- **Lead/Pluck Stab layer (CH7)**: `leadPluckTemplate` generates staccato lead lines with full staccato articulation override and StyleFamily-adaptive density.
+- **StyleFamily parameter**: new `StyleFamily` enum (`groove`/`rolling`/`sub`) on `MusicContext` and `GenerateRequest` drives all 7 layers' articulation and density together for rhythmic coherence across the stem bundle.
+- **`renderAndSaveNamed`**: stem-specific MIDI file naming function replacing the generic `renderAndSave` for the 7-stem pipeline.
+- **UI — StyleFamily pills**: replaced the "Offline flavor" dropdown with three `[Groove][Rolling][Sub]` pills in the Sidebar for offline mode.
+- **UI — Pad and Lead quick-action buttons**: added `Pad` and `Lead` to the per-track regen buttons alongside Bass/Arp/Mel.
+- **UI — 7-stem download panel**: output panel now uses a 2-column grid for 5+ files with stem labels (Bass Groove, Bass Rolling, Bass Sub, Arpeggio, Melody, Chord Pad, Lead) and click-to-open-folder action.
+- **Piano Roll — 7 track tabs**: PianoRoll now shows all 7 pattern types as tabs (Bass Groove, Bass Rolling, Bass Sub, Arp, Melody, Chord Pad, Lead) using the canonical display order.
+- **New style profiles**: `BassRolling` (exponential filter sweep, density 14-16), `ChordPadGroove`/`ChordPadRolling`/`ChordPadSub`, `LeadStab` (short staccato gate 0.20).
+- **Extended registry**: `DefaultForTypeExtended` covers all 7 pattern types; `renderAndSaveNamed` uses it as the profile fallback.
+
+
+- **Validator — rolling bass chromatic exception**: `validateRollingChromatics` allows chromatic approach notes (±1 semitone from any scale note) in `bass_rolling` patterns, with per-section enforcement: max 2 chromatic notes per 16-step section, never on the section downbeat.
+- **Validator — style-profile density override**: `constraintsForSpec` overrides density bounds by `StyleProfile` for rolling bass (14–16 active) and sub bass (4–6 active) even though both use `PatternType: "bassline"`, ensuring the correct per-style constraints apply when LLM-generated specs are validated.
+
 - **Debug logging throughout LLM generation pipeline**: all new logs use `slog.Debug` so they are silent at the default Info level and visible when `--log-level debug` is set.
   - `retry.go`: logs raw JSON snippet (first 500 bytes) and each individual validation error on every failed attempt; logs correction type matched (`chord_coherence`, `scale_violation`, `range_violation`, `evolution_action`, `density`, …); logs backoff duration; logs "all retries exhausted" as Warn with full last error.
   - `generator.go`: logs generation start (provider, key, scale, BPM, bars, seed); on repair path logs last error, raw snippet before repair, and repair success/failure with both errors.

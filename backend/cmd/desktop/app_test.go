@@ -116,6 +116,7 @@ func TestGenerateOfflineWritesThreeFiles(t *testing.T) {
 	app.outputDir = t.TempDir()
 	defer func() { _ = app.closeLogger() }()
 
+	// Offline mode with StyleFamily produces 7 stems (groove/rolling/sub bass + arp + melody + pad + lead).
 	result, err := app.Generate(GenerateRequest{
 		BPM:          122,
 		Key:          "Am",
@@ -124,12 +125,13 @@ func TestGenerateOfflineWritesThreeFiles(t *testing.T) {
 		Bars:         16,
 		Groove:       "straight",
 		OfflineStyle: "minimal",
+		StyleFamily:  "groove",
 	})
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
 	}
-	if len(result.Files) != 3 {
-		t.Fatalf("expected 3 files, got %d", len(result.Files))
+	if len(result.Files) != 7 {
+		t.Fatalf("expected 7 files, got %d", len(result.Files))
 	}
 	if result.Elapsed == "" {
 		t.Fatal("expected elapsed duration")
@@ -137,8 +139,8 @@ func TestGenerateOfflineWritesThreeFiles(t *testing.T) {
 	if result.Seed == "" {
 		t.Fatal("expected seed")
 	}
-	if len(result.Preview.Patterns) != 3 {
-		t.Fatalf("expected 3 preview patterns, got %d", len(result.Preview.Patterns))
+	if len(result.Preview.Patterns) != 7 {
+		t.Fatalf("expected 7 preview patterns, got %d", len(result.Preview.Patterns))
 	}
 	if len(result.Preview.Chords) == 0 {
 		t.Fatal("expected chord progression preview")

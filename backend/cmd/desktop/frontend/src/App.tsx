@@ -17,6 +17,7 @@ export default function App() {
     bars: 16,
     groove: 'mpc60',
     style: 'melodic',
+    styleFamily: 'groove',
     provider: 'offline',
     model: '',
     drums: false,

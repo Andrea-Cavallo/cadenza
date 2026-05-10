@@ -19,6 +19,15 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
+// StyleFamily drives adaptive generation across all layers when provider=offline.
+type StyleFamily string
+
+const (
+	StyleFamilyGroove  StyleFamily = "groove"
+	StyleFamilyRolling StyleFamily = "rolling"
+	StyleFamilySub     StyleFamily = "sub"
+)
+
 // MusicContext carries all musical parameters for a generation pass.
 type MusicContext struct {
 	BPM              float64
@@ -26,8 +35,9 @@ type MusicContext struct {
 	Bars             int
 	VariationSeed    string
 	ChordProgression theory.ChordProgression
-	Groove           string // timing preset: straight, mpc60, linndrum, humanize
-	OfflineStyle     string // melodic, hypnotic, driving, minimal
+	Groove           string      // timing preset: straight, mpc60, linndrum, humanize
+	OfflineStyle     string      // melodic, hypnotic, driving, minimal (legacy — use StyleFamily)
+	StyleFamily      StyleFamily // groove, rolling, sub — applies only when provider=offline
 }
 
 // SingleGenerator handles one pattern type generation via LLM with caching.

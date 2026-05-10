@@ -9,9 +9,10 @@ type GenerateRequest struct {
 	Bars         int    `json:"bars"`
 	Groove       string `json:"groove"`
 	OfflineStyle string `json:"offlineStyle"`
-	Seed         string `json:"seed"`        // empty = generate new random seed each time
-	ReuseChords  bool   `json:"reuseChords"` // keep last chord progression, vary motifs only
-	Track        string `json:"track"`       // "bassline"|"arpeggio"|"melody"|"" (all tracks)
+	StyleFamily  string `json:"styleFamily"`  // groove|rolling|sub — offline 7-stem mode
+	Seed         string `json:"seed"`         // empty = generate new random seed each time
+	ReuseChords  bool   `json:"reuseChords"`  // keep last chord progression, vary motifs only
+	Track        string `json:"track"`        // "bassline"|"bassline_rolling"|"bassline_sub"|"arpeggio"|"melody"|"chord_pad"|"lead_stab"|"" (all)
 }
 
 type GenerateResult struct {

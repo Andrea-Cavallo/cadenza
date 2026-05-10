@@ -856,6 +856,10 @@ input[type="range"] {
   overflow: auto;
 }
 
+.file-list-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .file-row {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -865,6 +869,35 @@ input[type="range"] {
   color: var(--fg-dim);
   padding: 8px;
   font-size: 11px;
+}
+
+.stem-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.stem-btn:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover, #0e1118);
+  color: var(--fg);
+}
+
+.stem-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.stem-ext {
+  font-size: 10px;
+  flex-shrink: 0;
 }
 
 .statusbar {
@@ -1066,6 +1099,13 @@ select:disabled {
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   margin-top: 8px;
+}
+
+.style-family-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .all-providers {
