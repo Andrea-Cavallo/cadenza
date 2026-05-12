@@ -2,7 +2,9 @@ package session_test
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -195,3 +197,93 @@ func TestFileSessionStore_SaveSetsTimestamps(t *testing.T) {
 	}
 }
 
+func TestFileSessionStore_List_SortedByUpdatedAt(t *testing.T) {
+	store, _ := newTempStore(t)
+	ctx := context.Background()
+
+	stateA := &session.SessionState{
+		Messages:   []session.Message{{Role: "user", Content: "sessione A unica"}},
+		MusicState: session.MusicState{Key: "Am"},
+	}
+	_ = store.Save(ctx, stateA, session.SaveReasonAuto)
+
+	stateB := &session.SessionState{
+		Messages:   []session.Message{{Role: "user", Content: "sessione B unica"}},
+		MusicState: session.MusicState{Key: "Cm"},
+	}
+	_ = store.Save(ctx, stateB, session.SaveReasonAuto)
+
+	metas, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(metas) != 2 {
+		t.Fatalf("attese 2 sessioni, trovate %d", len(metas))
+	}
+	// La lista è ordinata per UpdatedAt discendente: B (salvata per ultima) deve essere prima
+	if !metas[0].UpdatedAt.After(metas[1].UpdatedAt) && !metas[0].UpdatedAt.Equal(metas[1].UpdatedAt) {
+		t.Errorf("lista non ordinata per UpdatedAt desc: %v >= %v", metas[0].UpdatedAt, metas[1].UpdatedAt)
+	}
+}
+
+func TestFileSessionStore_Delete(t *testing.T) {
+	store, dir := newTempStore(t)
+	ctx := context.Background()
+	state := sampleState("delete-test")
+
+	_ = store.Save(ctx, state, session.SaveReasonManual)
+	hash := session.MessageHash(state.Messages)
+
+	if err := store.Delete(ctx, hash); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	path := filepath.Join(dir, hash+".czs")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("file non eliminato dopo Delete")
+	}
+}
+
+func TestFileSessionStore_Evict_ByCount(t *testing.T) {
+	cfg := session.SessionConfig{
+		Dir:         t.TempDir(),
+		MaxSizeMB:   100,
+		MaxSessions: 2,
+	}
+	store := session.NewFileStore(cfg)
+	ctx := context.Background()
+
+	for i := 0; i < 4; i++ {
+		st := &session.SessionState{
+			Messages: []session.Message{
+				{Role: "user", Content: fmt.Sprintf("sessione evict %d", i)},
+			},
+		}
+		_ = store.Save(ctx, st, session.SaveReasonAuto)
+	}
+
+	if err := store.Evict(ctx, 100); err != nil {
+		t.Fatalf("Evict: %v", err)
+	}
+
+	metas, _ := store.List(ctx)
+	if len(metas) > 2 {
+		t.Errorf("dopo evict attese ≤2 sessioni, trovate %d", len(metas))
+	}
+}
+
+func TestFileSessionStore_List_EmptyDir(t *testing.T) {
+	cfg := session.SessionConfig{
+		Dir:         filepath.Join(t.TempDir(), "non-esiste"),
+		MaxSizeMB:   100,
+		MaxSessions: 20,
+	}
+	store := session.NewFileStore(cfg)
+	metas, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List su dir non esistente dovrebbe restituire nil error, got: %v", err)
+	}
+	if len(metas) != 0 {
+		t.Errorf("attesa lista vuota, got %d elementi", len(metas))
+	}
+}
