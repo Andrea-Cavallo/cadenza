@@ -17,6 +17,7 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/renderer"
 	"github.com/Andrea-Cavallo/cadenza/internal/renderer/styleprofile"
 	"github.com/Andrea-Cavallo/cadenza/internal/schema"
+	"github.com/Andrea-Cavallo/cadenza/internal/session"
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
@@ -32,6 +33,7 @@ type lastRunInfo struct {
 }
 
 var lastRun lastRunInfo
+var activeStore *session.FileSessionStore
 
 func main() {
 	if handleConfigCommand(os.Args[1:]) {
@@ -84,6 +86,12 @@ func main() {
 	doctorFlag := flag.Bool("doctor", false, "Run diagnostics: Go version, API keys, Ollama, output directory")
 	nonInteractiveFlag := flag.Bool("non-interactive", false, "Non-interactive mode: require --bpm and --key, skip TUI")
 
+	resumeFlag              := flag.Bool("resume", false, "Riprendi l'ultima sessione salvata")
+	resumeIDFlag            := flag.String("resume-id", "", "ID sessione specifica da riprendere")
+	listSessionsFlag        := flag.Bool("list-sessions", false, "Elenca le sessioni salvate e termina")
+	sessionDirFlag          := flag.String("session-dir", "", "Directory per le sessioni (default: ~/.cadenza/sessions)")
+	checkpointIntervalFlag  := flag.Int("checkpoint-interval", 0, "Salva ogni N generazioni (0 = usa config)")
+
 	flag.Parse()
 
 	if *versionFlag {
@@ -104,6 +112,19 @@ func main() {
 	}
 
 	setupLogger(*outputFlag, appCfg)
+
+	sessionCfg := buildSessionConfig(appCfg, *sessionDirFlag, *checkpointIntervalFlag)
+	activeStore = session.NewFileStore(sessionCfg)
+
+	if *listSessionsFlag {
+		printSessionList(activeStore)
+		return
+	}
+
+	if *resumeFlag || *resumeIDFlag != "" {
+		resumeSession(activeStore, *resumeIDFlag)
+		return
+	}
 
 	slog.Debug("configuration loaded",
 		"env", appCfg.App.Env,
@@ -646,6 +667,14 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 
 	lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key, Files: outputFiles}
 	slog.Info("session complete", "files", len(outputFiles), "seed", seedStr, "bars", cfg.Bars)
+
+	if activeStore != nil {
+		checkpointState := buildCheckpointState(cfg, seedStr, prog, outputFiles)
+		if saveErr := activeStore.Save(context.Background(), checkpointState, session.SaveReasonAuto); saveErr != nil {
+			slog.Warn("checkpoint sessione fallito", "err", saveErr)
+		}
+	}
+
 	return nil
 }
 
@@ -760,5 +789,146 @@ func trackLabel(filename string) string {
 		return "[Melody]"
 	default:
 		return "[Track]"
+	}
+}
+
+func buildSessionConfig(appCfg *config.AppConfig, dirOverride string, intervalOverride int) session.SessionConfig {
+	cfg := session.SessionConfig{
+		Dir:                appCfg.Session.Dir,
+		MaxSizeMB:          appCfg.Session.MaxSizeMB,
+		CheckpointInterval: appCfg.Session.CheckpointInterval,
+		MaxSessions:        appCfg.Session.MaxSessions,
+	}
+	if dirOverride != "" {
+		cfg.Dir = dirOverride
+	}
+	if intervalOverride > 0 {
+		cfg.CheckpointInterval = intervalOverride
+	}
+	return cfg
+}
+
+func printSessionList(store *session.FileSessionStore) {
+	metas, err := store.List(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  %s✗  Errore lettura sessioni: %v%s\n", ansiRed, err, ansiReset)
+		return
+	}
+	if len(metas) == 0 {
+		fmt.Printf("  %sNessuna sessione salvata.%s\n", ansiDim, ansiReset)
+		return
+	}
+
+	fmt.Printf("\n  %sSESSIONI SALVATE%s\n\n", ansiDim+ansiWhite, ansiReset)
+	for i, m := range metas {
+		id := m.SessionID
+		if len(id) > 16 {
+			id = id[:16] + "..."
+		}
+		fmt.Printf("  %s[%d]%s  %-20s  %s%s%s  msg:%-3d  pat:%-3d  %s%.1f KB%s\n",
+			ansiYellow+ansiBold, i+1, ansiReset,
+			id,
+			ansiCyan, m.UpdatedAt.Format("2006-01-02 15:04"), ansiReset,
+			m.MessageCount, m.PatternCount,
+			ansiDim, float64(m.SizeBytes)/1024, ansiReset,
+		)
+	}
+	fmt.Printf("\n  %sRiprendi con:%s  cadenza --resume-id <id>\n\n", ansiDim, ansiReset)
+}
+
+func resumeSession(store *session.FileSessionStore, sessionID string) {
+	ctx := context.Background()
+
+	var (
+		state *session.SessionState
+		err   error
+	)
+
+	if sessionID != "" {
+		state, err = store.Load(ctx, sessionID)
+	} else {
+		metas, listErr := store.List(ctx)
+		if listErr != nil || len(metas) == 0 {
+			fmt.Printf("  %sNessuna sessione da riprendere.%s\n", ansiDim, ansiReset)
+			return
+		}
+		state, err = store.Load(ctx, metas[0].SessionID)
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  %s✗  Resume fallito: %v%s\n", ansiRed, err, ansiReset)
+		return
+	}
+
+	ms := state.MusicState
+	id := state.SessionID
+	if len(id) > 16 {
+		id = id[:16] + "..."
+	}
+	fmt.Printf("\n  %sRiprendo sessione %s%s\n", ansiGreen+ansiBold, id, ansiReset)
+	fmt.Printf("  %sKey:%s   %s   %sBPM:%s %d\n", ansiBold, ansiReset, ms.Key, ansiBold, ansiReset, ms.BPM)
+	fmt.Printf("  %sPattern:%s  %d   %sStep evolutivo:%s %d\n", ansiBold, ansiReset, len(ms.Patterns), ansiBold, ansiReset, ms.EvolutionStep)
+	fmt.Printf("  %sUltimo salvataggio:%s  %s  (%s)\n\n",
+		ansiBold, ansiReset,
+		state.UpdatedAt.Format("2006-01-02 15:04"),
+		state.SaveReason.String(),
+	)
+
+	bpm := float64(ms.BPM)
+	if bpm < 80 || bpm > 150 {
+		bpm = 122
+	}
+	key := ms.Key
+	if key == "" {
+		key = "Am"
+	}
+
+	cfg := cliConfig{
+		BPM:         bpm,
+		Key:         key,
+		OutputDir:   defaultOutputDir(),
+		NoLLM:       true,
+		Bars:        16,
+		Variations:  1,
+		Groove:      "straight",
+		Interactive: false,
+	}
+	if err := ensureWritableDir(cfg.OutputDir); err != nil {
+		fmt.Fprintf(os.Stderr, "  %s✗  %v%s\n", ansiRed, err, ansiReset)
+		return
+	}
+	runGeneration(cfg)
+}
+
+func buildCheckpointState(cfg cliConfig, seed string, prog theory.ChordProgression, files []string) *session.SessionState {
+	chords := make([]session.StoredChord, len(prog.Chords))
+	for i, c := range prog.Chords {
+		chords[i] = session.StoredChord{Root: c.Root, Quality: string(c.Quality), Bars: c.Bars}
+	}
+	patterns := make([]session.Pattern, len(files))
+	for i, f := range files {
+		patterns[i] = session.Pattern{
+			ID:        filepath.Base(f),
+			StepIndex: i,
+			CreatedAt: time.Now(),
+		}
+	}
+	return &session.SessionState{
+		SessionID: seed,
+		Messages: []session.Message{
+			{Role: "system", Content: fmt.Sprintf("key=%s bpm=%.0f seed=%s", cfg.Key, cfg.BPM, seed)},
+		},
+		MusicState: session.MusicState{
+			Key:           cfg.Key,
+			BPM:           int(cfg.BPM),
+			TimeSignature: "4/4",
+			Patterns:      patterns,
+			HarmonyHistory: []session.StoredProgression{{
+				Key:    prog.Key,
+				Mode:   prog.Mode,
+				Chords: chords,
+			}},
+			EvolutionStep: len(files),
+		},
 	}
 }
