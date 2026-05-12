@@ -21,6 +21,15 @@ linters:
         - unnamedResult
     misspell:
       locale: US
+  exclusions:
+    paths:
+      - docs
+      - .idea
+      - .tokensave
+    rules:
+      - path: internal/session/
+        linters:
+          - misspell
 
 formatters:
   enable:
@@ -28,9 +37,5 @@ formatters:
     - goimports
 
 issues:
-  exclude-dirs:
-    - docs
-    - .idea
-    - .tokensave
   max-issues-per-linter: 50
   max-same-issues: 3

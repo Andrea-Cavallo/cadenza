@@ -213,7 +213,7 @@ func (s *FileSessionStore) Evict(ctx context.Context, maxSizeMB int) error {
 		totalBytes -= oldest.SizeBytes
 
 		if err := os.Remove(oldest.FilePath); err != nil {
-			slog.Warn("evict: remove failed", "path", oldest.FilePath, "err", err)
+			slog.Warn("evict: impossibile eliminare", "path", oldest.FilePath, "err", err)
 			continue
 		}
 		slog.Info("evict: sessione eliminata",
