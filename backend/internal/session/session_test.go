@@ -1,7 +1,10 @@
 package session_test
 
 import (
+	"context"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/Andrea-Cavallo/cadenza/internal/session"
 )
@@ -88,3 +91,107 @@ func TestMessageHash_DifferentMessages(t *testing.T) {
 		t.Error("hash identico per messaggi diversi")
 	}
 }
+
+func newTempStore(t *testing.T) (*session.FileSessionStore, string) {
+	t.Helper()
+	dir := t.TempDir()
+	cfg := session.SessionConfig{Dir: dir, MaxSizeMB: 100, CheckpointInterval: 3, MaxSessions: 20}
+	return session.NewFileStore(cfg), dir
+}
+
+func sampleState(content string) *session.SessionState {
+	return &session.SessionState{
+		SessionID: content,
+		Messages: []session.Message{
+			{Role: "user", Content: content},
+		},
+		MusicState: session.MusicState{
+			Key:           "Am",
+			BPM:           128,
+			TimeSignature: "4/4",
+			EvolutionStep: 1,
+		},
+	}
+}
+
+func TestFileSessionStore_SaveCreatesFile(t *testing.T) {
+	store, dir := newTempStore(t)
+	state := sampleState("sessione-1")
+
+	if err := store.Save(context.Background(), state, session.SaveReasonManual); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	entries, _ := os.ReadDir(dir)
+	czs := 0
+	for _, e := range entries {
+		if len(e.Name()) > 4 && e.Name()[len(e.Name())-4:] == ".czs" {
+			czs++
+		}
+	}
+	if czs != 1 {
+		t.Errorf("atteso 1 file .czs, trovati %d", czs)
+	}
+}
+
+func TestFileSessionStore_LoadRoundTrip(t *testing.T) {
+	store, _ := newTempStore(t)
+	state := sampleState("sessione-2")
+	state.MusicState.EvolutionStep = 5
+
+	if err := store.Save(context.Background(), state, session.SaveReasonAuto); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	hash := session.MessageHash(state.Messages)
+	loaded, err := store.LoadByMessageHash(context.Background(), hash)
+	if err != nil {
+		t.Fatalf("LoadByMessageHash: %v", err)
+	}
+	if loaded.MusicState.EvolutionStep != 5 {
+		t.Errorf("EvolutionStep: got %d, want 5", loaded.MusicState.EvolutionStep)
+	}
+	if loaded.MusicState.Key != "Am" {
+		t.Errorf("Key: got %q, want Am", loaded.MusicState.Key)
+	}
+	if loaded.SaveReason != session.SaveReasonAuto {
+		t.Errorf("SaveReason: got %v, want Auto", loaded.SaveReason)
+	}
+}
+
+func TestFileSessionStore_LoadBySessionID(t *testing.T) {
+	store, _ := newTempStore(t)
+	state := sampleState("sessione-3")
+
+	if err := store.Save(context.Background(), state, session.SaveReasonManual); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	hash := session.MessageHash(state.Messages)
+	loaded, err := store.Load(context.Background(), hash)
+	if err != nil {
+		t.Fatalf("Load by sessionID: %v", err)
+	}
+	if loaded.MusicState.Key != "Am" {
+		t.Errorf("Key mismatch dopo Load")
+	}
+}
+
+func TestFileSessionStore_SaveSetsTimestamps(t *testing.T) {
+	store, _ := newTempStore(t)
+	before := time.Now()
+	state := sampleState("sessione-4")
+
+	if err := store.Save(context.Background(), state, session.SaveReasonAuto); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	after := time.Now()
+
+	if state.UpdatedAt.Before(before) || state.UpdatedAt.After(after) {
+		t.Errorf("UpdatedAt fuori range: %v", state.UpdatedAt)
+	}
+	if state.CreatedAt.IsZero() {
+		t.Error("CreatedAt non impostato")
+	}
+}
+
