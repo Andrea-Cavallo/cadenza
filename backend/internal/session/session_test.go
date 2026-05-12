@@ -58,3 +58,33 @@ func TestDecodeHeader_InvalidVersion(t *testing.T) {
 		t.Error("expected error for invalid version, got nil")
 	}
 }
+
+func TestMessageHash_Deterministic(t *testing.T) {
+	msgs := []session.Message{
+		{Role: "user", Content: "bpm 128 key Am"},
+		{Role: "assistant", Content: "pattern generated"},
+	}
+	h1 := session.MessageHash(msgs)
+	h2 := session.MessageHash(msgs)
+	if h1 != h2 {
+		t.Errorf("hash non deterministico: %q != %q", h1, h2)
+	}
+	if len(h1) != 40 {
+		t.Errorf("lunghezza hash SHA1 attesa 40, ottenuta %d", len(h1))
+	}
+}
+
+func TestMessageHash_Empty(t *testing.T) {
+	h := session.MessageHash(nil)
+	if len(h) != 40 {
+		t.Errorf("hash atteso per lista vuota, len=%d", len(h))
+	}
+}
+
+func TestMessageHash_DifferentMessages(t *testing.T) {
+	msgs1 := []session.Message{{Role: "user", Content: "A"}}
+	msgs2 := []session.Message{{Role: "user", Content: "B"}}
+	if session.MessageHash(msgs1) == session.MessageHash(msgs2) {
+		t.Error("hash identico per messaggi diversi")
+	}
+}
