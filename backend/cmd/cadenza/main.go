@@ -34,6 +34,7 @@ type lastRunInfo struct {
 
 var lastRun lastRunInfo
 var activeStore *session.FileSessionStore
+var checkpointCounter int
 
 func main() {
 	if handleConfigCommand(os.Args[1:]) {
@@ -668,10 +669,13 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 	lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key, Files: outputFiles}
 	slog.Info("session complete", "files", len(outputFiles), "seed", seedStr, "bars", cfg.Bars)
 
-	if activeStore != nil {
+	checkpointCounter++
+	if activeStore != nil && checkpointCounter%getCheckpointInterval() == 0 {
 		checkpointState := buildCheckpointState(cfg, seedStr, prog, outputFiles)
 		if saveErr := activeStore.Save(context.Background(), checkpointState, session.SaveReasonAuto); saveErr != nil {
 			slog.Warn("checkpoint sessione fallito", "err", saveErr)
+		} else if evictErr := activeStore.Evict(context.Background(), activeStore.MaxSizeMB()); evictErr != nil {
+			slog.Warn("evict sessione fallito", "err", evictErr)
 		}
 	}
 
@@ -931,4 +935,17 @@ func buildCheckpointState(cfg cliConfig, seed string, prog theory.ChordProgressi
 			EvolutionStep: len(files),
 		},
 	}
+}
+
+// getCheckpointInterval restituisce l'intervallo di checkpoint configurato.
+// Restituisce 1 se lo store non è disponibile o se l'intervallo non è positivo,
+// garantendo che ogni generazione venga salvata in quel caso.
+func getCheckpointInterval() int {
+	if activeStore == nil {
+		return 1
+	}
+	if activeStore.CheckpointInterval() <= 0 {
+		return 1
+	}
+	return activeStore.CheckpointInterval()
 }

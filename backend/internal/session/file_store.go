@@ -111,6 +111,12 @@ func (s *FileSessionStore) loadFile(path string) (*SessionState, error) {
 }
 
 func (s *FileSessionStore) List(ctx context.Context) ([]SessionMeta, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listUnlocked(ctx)
+}
+
+func (s *FileSessionStore) listUnlocked(ctx context.Context) ([]SessionMeta, error) {
 	entries, err := os.ReadDir(s.cfg.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -185,11 +191,21 @@ func (s *FileSessionStore) Delete(ctx context.Context, sessionID string) error {
 	return nil
 }
 
+// MaxSizeMB restituisce il limite massimo in MB configurato per lo store.
+func (s *FileSessionStore) MaxSizeMB() int {
+	return s.cfg.MaxSizeMB
+}
+
+// CheckpointInterval restituisce l'intervallo di checkpoint configurato.
+func (s *FileSessionStore) CheckpointInterval() int {
+	return s.cfg.CheckpointInterval
+}
+
 func (s *FileSessionStore) Evict(ctx context.Context, maxSizeMB int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	metas, err := s.List(ctx)
+	metas, err := s.listUnlocked(ctx)
 	if err != nil {
 		return err
 	}
