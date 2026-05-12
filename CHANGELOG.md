@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Session persistence (`internal/session/`)**: sessions are saved to `.czs` files (32-byte binary header + JSON payload) in `~/.cadenza/sessions/`. File names are derived from a SHA1 hash of the LLM message history, enabling automatic deduplication of identical histories. Implements `SessionStore` interface with `Save`, `Load`, `LoadByMessageHash`, `List`, `Delete`, and `Evict` methods.
+- **FIFO session eviction**: after every checkpoint, old sessions are automatically evicted to stay within `MaxSessions` (default 20) and `MaxSizeMB` (default 512 MB) limits, sorted by `UpdatedAt` ascending (oldest first).
+- **Checkpoint saves**: every N generations (configurable via `--checkpoint-interval`, default 3) the session state is written to disk automatically with `SaveReason: Auto`.
+- **CLI flags for session management**: `--resume` (resume last session), `--resume-id <hash>` (resume a specific session by SHA1), `--list-sessions` (tabular list of saved sessions with ID, date, message count, pattern count, size), `--session-dir <path>` (override session directory), `--checkpoint-interval <n>` (override save frequency).
+- **`SessionSection` in `AppConfig`**: session defaults (`Dir`, `MaxSizeMB`, `CheckpointInterval`, `MaxSessions`) are now part of the unified application config loaded from YAML/ENV.
+- **golangci-lint v2 syntax migration**: `.golangci.yml` updated from deprecated v1 keys (`issues.exclude-dirs`) to v2 (`linters.exclusions.paths`); added `misspell` exclusion for `internal/session/` to protect Italian log strings from false English-spelling corrections.
+
+### Fixed
+- **Mutex deadlock risk in `FileSessionStore`**: extracted `listUnlocked` private method so `Evict` (which holds `s.mu.Lock()`) can call list logic without re-acquiring the lock; public `List` wraps `listUnlocked` with the lock.
+
 - **7-stem offline bundle**: offline mode now generates all 7 stems in parallel — Bass Groove, Bass Rolling, Bass Sub, Arp, Melody, Chord Pad, Lead. Output files named `output_bassline-groove_*.mid`, `output_bassline-rolling_*.mid`, `output_bassline-sub_*.mid`, `output_arp_*.mid`, `output_melody_*.mid`, `output_chord-pad_*.mid`, `output_lead_*.mid`.
 - **Rolling bassline (TB-303/acid)**: `basslineRolling` generates near-full density (14-16/16 active steps) patterns using 5 rolling sub-patterns (R0-R4) including acid pulse, chromatic fill, octave stream, and double-root phrases. Groove comes from velocity variation rather than rests.
 - **Sub bassline (dub/deep techno)**: `basslineSub` generates sparse low-register patterns (4-6/16 active steps) using 4 sub-patterns (S0-S3) in octave 1 (MIDI 24-43) with legato holds.
