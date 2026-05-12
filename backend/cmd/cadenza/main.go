@@ -86,11 +86,11 @@ func main() {
 	doctorFlag := flag.Bool("doctor", false, "Run diagnostics: Go version, API keys, Ollama, output directory")
 	nonInteractiveFlag := flag.Bool("non-interactive", false, "Non-interactive mode: require --bpm and --key, skip TUI")
 
-	resumeFlag              := flag.Bool("resume", false, "Riprendi l'ultima sessione salvata")
-	resumeIDFlag            := flag.String("resume-id", "", "ID sessione specifica da riprendere")
-	listSessionsFlag        := flag.Bool("list-sessions", false, "Elenca le sessioni salvate e termina")
-	sessionDirFlag          := flag.String("session-dir", "", "Directory per le sessioni (default: ~/.cadenza/sessions)")
-	checkpointIntervalFlag  := flag.Int("checkpoint-interval", 0, "Salva ogni N generazioni (0 = usa config)")
+	resumeFlag := flag.Bool("resume", false, "Riprendi l'ultima sessione salvata")
+	resumeIDFlag := flag.String("resume-id", "", "ID sessione specifica da riprendere")
+	listSessionsFlag := flag.Bool("list-sessions", false, "Elenca le sessioni salvate e termina")
+	sessionDirFlag := flag.String("session-dir", "", "Directory per le sessioni (default: ~/.cadenza/sessions)")
+	checkpointIntervalFlag := flag.Int("checkpoint-interval", 0, "Salva ogni N generazioni (0 = usa config)")
 
 	flag.Parse()
 

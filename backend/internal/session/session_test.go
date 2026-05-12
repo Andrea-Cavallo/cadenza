@@ -94,11 +94,12 @@ func TestMessageHash_DifferentMessages(t *testing.T) {
 	}
 }
 
-func newTempStore(t *testing.T) (*session.FileSessionStore, string) {
+func newTempStore(t *testing.T) (store *session.FileSessionStore, dir string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir = t.TempDir()
 	cfg := session.SessionConfig{Dir: dir, MaxSizeMB: 100, CheckpointInterval: 3, MaxSessions: 20}
-	return session.NewFileStore(cfg), dir
+	store = session.NewFileStore(cfg)
+	return
 }
 
 func sampleState(content string) *session.SessionState {
@@ -240,7 +241,7 @@ func TestFileSessionStore_Delete(t *testing.T) {
 
 	path := filepath.Join(dir, hash+".czs")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Error("file non eliminato dopo Delete")
+		t.Error("file not removed after Delete")
 	}
 }
 

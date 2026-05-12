@@ -144,7 +144,7 @@ func (s *FileSessionStore) readMeta(path string, e os.DirEntry) (SessionMeta, er
 	if err != nil {
 		return SessionMeta{}, fmt.Errorf("apri file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var rawHdr [headerSize]byte
 	if _, err := io.ReadFull(f, rawHdr[:]); err != nil {
@@ -213,7 +213,7 @@ func (s *FileSessionStore) Evict(ctx context.Context, maxSizeMB int) error {
 		totalBytes -= oldest.SizeBytes
 
 		if err := os.Remove(oldest.FilePath); err != nil {
-			slog.Warn("evict: impossibile eliminare", "path", oldest.FilePath, "err", err)
+			slog.Warn("evict: remove failed", "path", oldest.FilePath, "err", err)
 			continue
 		}
 		slog.Info("evict: sessione eliminata",

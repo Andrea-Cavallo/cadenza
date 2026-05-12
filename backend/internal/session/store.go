@@ -15,7 +15,7 @@ const (
 type SaveReason uint8
 
 const (
-	SaveReasonManual   SaveReason = iota
+	SaveReasonManual SaveReason = iota
 	SaveReasonAuto
 	SaveReasonEvict
 	SaveReasonShutdown
