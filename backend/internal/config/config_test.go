@@ -162,3 +162,20 @@ func TestValidateMultipleErrors(t *testing.T) {
 		t.Fatal("expected multiple validation errors")
 	}
 }
+
+func TestLoad_SessionDefaults(t *testing.T) {
+	cfg, err := Load()
+	if err != nil {
+		// fallback: create with zero values to check the Session field exists
+		cfg = &AppConfig{}
+	}
+	if cfg.Session.MaxSizeMB == 0 {
+		t.Error("Session.MaxSizeMB deve avere un default > 0")
+	}
+	if cfg.Session.MaxSessions == 0 {
+		t.Error("Session.MaxSessions deve avere un default > 0")
+	}
+	if cfg.Session.CheckpointInterval == 0 {
+		t.Error("Session.CheckpointInterval deve avere un default > 0")
+	}
+}

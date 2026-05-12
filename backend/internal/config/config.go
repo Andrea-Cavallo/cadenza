@@ -18,6 +18,7 @@ type AppConfig struct {
 	Output   OutputSection   `mapstructure:"output"`
 	Logging  LoggingSection  `mapstructure:"logging"`
 	Cache    CacheSection    `mapstructure:"cache"`
+	Session  SessionSection  `mapstructure:"session"`
 }
 
 // AppSection holds general application settings.
@@ -78,6 +79,14 @@ type CacheSection struct {
 	Enabled bool   `mapstructure:"enabled"`
 	TTLDays int    `mapstructure:"ttl_days"`
 	Dir     string `mapstructure:"dir"`
+}
+
+// SessionSection parametrizza la persistenza delle sessioni su disco.
+type SessionSection struct {
+	Dir                string `mapstructure:"dir"`
+	MaxSizeMB          int    `mapstructure:"max_size_mb"`
+	CheckpointInterval int    `mapstructure:"checkpoint_interval"`
+	MaxSessions        int    `mapstructure:"max_sessions"`
 }
 
 // Load reads configuration from file, env vars, and applies defaults.
@@ -171,6 +180,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.enabled", true)
 	v.SetDefault("cache.ttl_days", 30)
 	v.SetDefault("cache.dir", ".cache")
+
+	// Session
+	home, _ := os.UserHomeDir()
+	v.SetDefault("session.dir", filepath.Join(home, ".cadenza", "sessions"))
+	v.SetDefault("session.max_size_mb", 512)
+	v.SetDefault("session.checkpoint_interval", 3)
+	v.SetDefault("session.max_sessions", 20)
 }
 
 func (c *AppConfig) Validate() error {
