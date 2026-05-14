@@ -12,6 +12,11 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/config"
 )
 
+func init() {
+	// Prevent os.Exit during tests — EOF from simulated stdin should not kill the test process.
+	onStdinEOF = func() {}
+}
+
 func withInput(input string, fn func()) {
 	old := stdinReader
 	stdinReader = bufio.NewReader(strings.NewReader(input))

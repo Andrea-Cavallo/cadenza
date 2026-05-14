@@ -176,9 +176,11 @@ export GEMINI_API_KEY=...
 ./bin/cadenza --bpm 128 --key Dm --provider gemini
 ```
 
-#### Ollama
+#### Ollama — Local LLM (no API key, no internet after setup)
 
-Run entirely on-device — no API key, no internet, full privacy. The example below was generated with **Gemma** running locally via Ollama.
+Run entirely on-device. No API key, no cloud, full privacy. After the one-time model download Cadenza works 100 % offline with LLM creativity.
+
+The screenshots below are real output generated with **Gemma** running locally via Ollama:
 
 <p align="center">
   <img src="bass.png" alt="Bass stem — generated with Ollama + Gemma" width="640" /><br/>
@@ -195,11 +197,98 @@ Run entirely on-device — no API key, no internet, full privacy. The example be
   <em>Melody stem — Ollama + Gemma</em>
 </p>
 
+##### Step 1 — Install Ollama
+
+**macOS**
+
 ```bash
-ollama pull gemma        # one-time model download
-ollama serve
-./bin/cadenza --bpm 126 --key Fm --provider ollama --model gemma
+# Option A — official installer (recommended)
+# Download from https://ollama.com/download and open the .dmg
+
+# Option B — Homebrew
+brew install ollama
 ```
+
+After installation the `ollama` menu-bar icon appears. It starts the server automatically on `http://localhost:11434`.
+
+**Windows**
+
+Download the installer from **https://ollama.com/download** and run `OllamaSetup.exe`.  
+After installation Ollama runs as a background service on `http://localhost:11434`.  
+No additional configuration is needed.
+
+> **Firewall note:** if Windows Defender Firewall prompts you, allow access only on private networks.
+
+##### Step 2 — Download a model
+
+Open a terminal (macOS: Terminal / iTerm; Windows: PowerShell or CMD) and run **one** of:
+
+```bash
+ollama pull gemma          # Google Gemma 2 — fast, good musical JSON (recommended)
+ollama pull qwen2.5:7b     # Alibaba Qwen 2.5 7B — strong instruction following
+ollama pull llama3.2       # Meta Llama 3.2 — solid general quality
+ollama pull mistral        # Mistral 7B — lightweight, quick on CPU
+```
+
+The download is a one-time operation (~4–8 GB depending on the model). Progress is shown in the terminal.
+
+Check what you have installed:
+
+```bash
+ollama list
+```
+
+##### Step 3 — Start the Ollama server
+
+**macOS** — the server starts automatically when the app launches from the menu bar.  
+To start it manually from the terminal:
+
+```bash
+ollama serve
+```
+
+**Windows** — the service starts automatically after installation.  
+To start it manually from PowerShell:
+
+```powershell
+ollama serve
+```
+
+Verify it is running (both platforms):
+
+```bash
+curl http://localhost:11434/api/tags
+# or in PowerShell:
+Invoke-RestMethod http://localhost:11434/api/tags
+```
+
+You should see a JSON list of your installed models. If you get a connection error, run `ollama serve` first.
+
+##### Step 4 — Run Cadenza with Ollama
+
+```bash
+# macOS / Linux
+./bin/cadenza --bpm 126 --key Fm --provider ollama --model gemma
+
+# Windows (PowerShell)
+.\bin\cadenza.exe --bpm 126 --key Fm --provider ollama --model gemma
+
+# From source
+cd backend && go run ./cmd/cadenza/ --bpm 126 --key Fm --provider ollama --model gemma
+```
+
+Swap `--model gemma` for any model name returned by `ollama list`.
+
+##### Recommended models for Cadenza
+
+| Model | Size | Notes |
+|-------|------|-------|
+| `gemma` | ~5 GB | Best balance of speed and musical output |
+| `qwen2.5:7b` | ~5 GB | Strong JSON schema compliance |
+| `llama3.2` | ~2 GB | Fastest on CPU-only machines |
+| `mistral` | ~4 GB | Good fallback if others are slow |
+
+> **Performance tip:** Ollama runs faster with a GPU. On CPU-only machines use `llama3.2` or `mistral` for lower latency. Generation time is typically 5–30 s depending on hardware.
 
 ---
 

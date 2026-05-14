@@ -29,6 +29,7 @@ type AppService struct {
 	logPath      string
 	logFile      *os.File
 	lastMusicCtx *generator.MusicContext // cached for ReuseChords and per-track regeneration
+	ollamaCmd    *exec.Cmd               // tracked for cleanup on shutdown
 }
 
 func NewApp() *AppService { return &AppService{} }
@@ -37,6 +38,18 @@ func (a *AppService) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.ensureLogger()
 	models.Load("")
+}
+
+func (a *AppService) shutdown(ctx context.Context) {
+	if a.ollamaCmd != nil && a.ollamaCmd.Process != nil {
+		if err := a.ollamaCmd.Process.Kill(); err != nil {
+			slog.Warn("failed to stop ollama child process", "err", err)
+		}
+		a.ollamaCmd = nil
+	}
+	if a.logFile != nil {
+		a.logFile.Close()
+	}
 }
 
 func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
@@ -70,6 +83,7 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 	mg := generator.NewMultiGenerator(prov, v, reg, rend, w, outputDir)
 	mg.NoLLM = req.NoLLM || strings.EqualFold(req.Provider, "offline")
 	mg.Sequential = strings.EqualFold(req.Provider, "ollama")
+	mg.SetLLMOverrides(0.3, 3, 30) // Desktop uses defaults; CLI reads from cadenza.yaml
 
 	parsedKey, err := theory.ParseKey(req.Key)
 	if err != nil {
@@ -225,6 +239,10 @@ func (a *AppService) StartOllama() (ProviderStatus, error) {
 	if _, err := exec.LookPath("ollama"); err != nil {
 		return a.GetProviderStatus("ollama"), fmt.Errorf("ollama executable not found on PATH")
 	}
+	if a.ollamaCmd != nil && a.ollamaCmd.Process != nil {
+		// Already running
+		return a.GetProviderStatus("ollama"), nil
+	}
 	cmd := exec.Command("ollama", "serve")
 	if runtime.GOOS == "windows" {
 		cmd.SysProcAttr = hiddenWindowSysProcAttr()
@@ -232,7 +250,18 @@ func (a *AppService) StartOllama() (ProviderStatus, error) {
 	if err := cmd.Start(); err != nil {
 		return a.GetProviderStatus("ollama"), fmt.Errorf("start ollama: %w", err)
 	}
+	a.ollamaCmd = cmd
 	time.Sleep(800 * time.Millisecond)
+	return a.GetProviderStatus("ollama"), nil
+}
+
+func (a *AppService) StopOllama() (ProviderStatus, error) {
+	if a.ollamaCmd != nil && a.ollamaCmd.Process != nil {
+		if err := a.ollamaCmd.Process.Kill(); err != nil {
+			return a.GetProviderStatus("ollama"), fmt.Errorf("stop ollama: %w", err)
+		}
+		a.ollamaCmd = nil
+	}
 	return a.GetProviderStatus("ollama"), nil
 }
 

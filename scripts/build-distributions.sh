@@ -153,8 +153,8 @@ assert_package_contents() {
   if [[ "$desktop_expected" == "1" ]]; then
     [[ -d "$stage_dir/desktop" ]] || { echo "Missing desktop folder for $package_name" >&2; exit 1; }
     if [[ "$package_name" == windows-* ]]; then
-      [[ -f "$stage_dir/desktop/cadenza-desktop.exe" ]] || {
-        echo "Windows package must contain desktop/cadenza-desktop.exe" >&2
+      [[ -f "$stage_dir/desktop/Cadenza.exe" ]] || {
+        echo "Windows package must contain desktop/Cadenza.exe" >&2
         exit 1
       }
     fi

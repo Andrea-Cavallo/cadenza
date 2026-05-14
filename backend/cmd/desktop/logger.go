@@ -21,7 +21,7 @@ func setupDesktopLogger(outputDir string, ctx context.Context) (string, *os.File
 		return "", nil, fmt.Errorf("create output dir: %w", err)
 	}
 
-	logPath := filepath.Join(outputDir, "logs", "cadenza-desktop.log")
+	logPath := filepath.Join(outputDir, "logs", "Cadenza.log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
 		return "", nil, fmt.Errorf("create log dir: %w", err)
 	}
@@ -38,7 +38,7 @@ func setupDesktopLogger(outputDir string, ctx context.Context) (string, *os.File
 
 	handler := slog.NewTextHandler(io.MultiWriter(writers...), &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.SetDefault(slog.New(handler))
-	slog.Info("cadenza desktop started", "log", logPath, "time", time.Now().Format(time.RFC3339))
+	slog.Info("Cadenza desktop started", "log", logPath, "time", time.Now().Format(time.RFC3339))
 	return logPath, f, nil
 }
 
@@ -48,10 +48,19 @@ type eventLineWriter struct {
 
 	mu  sync.Mutex
 	buf bytes.Buffer
+	ch  chan string
 }
 
 func newEventLineWriter(ctx context.Context, event string) *eventLineWriter {
-	return &eventLineWriter{ctx: ctx, event: event}
+	w := &eventLineWriter{ctx: ctx, event: event, ch: make(chan string, 128)}
+	go w.worker()
+	return w
+}
+
+func (w *eventLineWriter) worker() {
+	for line := range w.ch {
+		wailsruntime.EventsEmit(w.ctx, w.event, line)
+	}
 }
 
 func shouldEmitWailsEvents(ctx context.Context) bool {
@@ -96,10 +105,14 @@ func (w *eventLineWriter) emit(line string) {
 	if line == "" || w.ctx == nil {
 		return
 	}
-	go func() {
-		defer func() {
-			_ = recover()
-		}()
-		wailsruntime.EventsEmit(w.ctx, w.event, line)
-	}()
+	select {
+	case w.ch <- line:
+	default:
+		// Channel full — drop oldest to make room
+		select {
+		case <-w.ch:
+		default:
+		}
+		w.ch <- line
+	}
 }

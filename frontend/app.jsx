@@ -165,13 +165,13 @@ cadenza --bpm 122 --key Am --no-llm`}
 
 function App() {
   const tweakDefaults = /*EDITMODE-BEGIN*/{
-    "accent": "lime"
+    "accent": "orange"
   }/*EDITMODE-END*/;
   const [tweaks, setTweak] = useTweaks(tweakDefaults);
 
   useEffect(() => {
-    const map = { lime: "#01FF95", cyan: "#00E0FF", amber: "#FFB000" };
-    document.documentElement.style.setProperty("--accent", map[tweaks.accent] || map.lime);
+    const map = { orange: "#FF6B2B", lime: "#01FF95", cyan: "#00E0FF", amber: "#FFB000" };
+    document.documentElement.style.setProperty("--accent", map[tweaks.accent] || map.orange);
   }, [tweaks.accent]);
 
   const [activePreset, setActivePreset] = useState("progressive-warmup");
@@ -240,13 +240,15 @@ function App() {
             onChange={(v) => {
               setTweak("accent", v);
               const map = {
+                orange: "#FF6B2B",
                 lime:  "#01FF95",
                 cyan:  "#00E0FF",
                 amber: "#FFB000",
               };
-              document.documentElement.style.setProperty("--accent", map[v] || map.lime);
+              document.documentElement.style.setProperty("--accent", map[v] || map.orange);
             }}
             options={[
+              { value: "orange", label: "Orange" },
               { value: "lime",  label: "Lime"  },
               { value: "cyan",  label: "Cyan"  },
               { value: "amber", label: "Amber" },

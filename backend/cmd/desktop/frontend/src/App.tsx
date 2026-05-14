@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { InfoModal } from './components/InfoModal'
 import { LogDrawer } from './components/LogDrawer'
 import { PianoRoll } from './components/PianoRoll'
@@ -13,7 +14,7 @@ import * as AppService from '../wailsjs/go/main/AppService'
 export default function App() {
   const [params, setParams] = useState<Params>({
     bpm: 122,
-    key: 'Am-dorian',
+    key: 'C',
     bars: 16,
     groove: 'mpc60',
     style: 'melodic',

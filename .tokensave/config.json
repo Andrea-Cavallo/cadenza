@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "root_dir": "C:\\Users\\Andrea\\Desktop\\LLMIDI",
+  "exclude": [
+    "target/**",
+    ".git/**",
+    ".tokensave/**",
+    "node_modules/**",
+    "vendor/**",
+    "**/*.min.*",
+    "bin/**",
+    "build/**",
+    "out/**",
+    ".gradle/**"
+  ],
+  "max_file_size": 1048576,
+  "extract_docstrings": true,
+  "track_call_sites": true,
+  "enable_embeddings": false,
+  "git_ignore": false
+}

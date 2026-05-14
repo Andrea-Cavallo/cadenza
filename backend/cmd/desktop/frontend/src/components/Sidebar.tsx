@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction } from 'react'
 import { useGenerator } from '../useGenerator'
 import { GenerationPreview, Params, ProviderStatus } from '../types'
+import { providerLabel } from '../lib/labels'
 
 const KEYS = [
   'Am', 'Bm', 'Cm', 'Dm', 'Em', 'Fm', 'Gm',
@@ -52,7 +53,7 @@ export function Sidebar({
   outputDir, onChooseOutputDir, onOpenOutputFolder,
 }: SidebarProps) {
   const {
-    statusLoading, pulling, modelChoices, canGenerate,
+    statusLoading, pulling, generationStep, modelChoices, canGenerate,
     refreshProvider, selectProvider, handleStartOllama,
     handlePullModel, handleGenerate, handleSameHarmony,
     handleRegenTrack, handleAB, openProviderSetup,
@@ -236,6 +237,18 @@ export function Sidebar({
         >
           {running ? 'Generating...' : 'Generate'}
         </button>
+        {running && generationStep && (
+          <div className="generation-progress mono" style={{
+            textAlign: 'center',
+            marginTop: 8,
+            fontSize: 10,
+            color: 'var(--fg-muted)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}>
+            {generationStep}
+          </div>
+        )}
 
         {hasFiles && !running && (
           <div className="quick-actions">
@@ -308,19 +321,4 @@ function providerStatusDetail(provider: string, status: ProviderStatus | null): 
     return `${status.localModels.length} local model${status.localModels.length === 1 ? '' : 's'} available`
   }
   return status.setupHint || status.message
-}
-
-function providerLabel(provider: string): string {
-  switch (provider) {
-    case 'claude':
-      return 'Claude'
-    case 'openai':
-      return 'OpenAI'
-    case 'gemini':
-      return 'Gemini'
-    case 'ollama':
-      return 'Ollama'
-    default:
-      return provider || 'Provider'
-  }
 }

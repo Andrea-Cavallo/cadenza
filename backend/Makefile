@@ -29,10 +29,12 @@ desktop-dev: ## Start Wails dev mode with HMR frontend
 
 desktop-manual: ## Manual Wails-style frontend + Go production build
 	cd cmd/desktop/frontend && npm install && npm run build
-	cd cmd/desktop && go build -tags "desktop,production" -ldflags="-w -s -H windowsgui" -o build/bin/cadenza-desktop.exe .
+	cd cmd/desktop && go build -tags "desktop,production" -ldflags="-w -s -H windowsgui" -o build/bin/Cadenza.exe .
 
 distributions: ## Build release ZIPs with CLI + Wails desktop where available
-	cd .. && if command -v pwsh >/dev/null 2>&1; then \
+	@repo_root=$$(cd $(dir $(lastword $(MAKEFILE_LIST))) && pwd); \
+	cd $$repo_root/..; \
+	if command -v pwsh >/dev/null 2>&1; then \
 		pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build-distributions.ps1; \
 	else \
 		bash scripts/build-distributions.sh; \

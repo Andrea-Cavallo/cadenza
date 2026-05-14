@@ -37,8 +37,13 @@ func GenerateWithRetry(ctx context.Context, p Provider, req GenerateRequest, val
 	var totalTokens int
 	var lastRaw []byte
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		slog.Debug("llm attempt starting", "attempt", attempt+1, "max", maxRetries, "provider", p.Name())
+	retries := maxRetries
+	if req.MaxRetries > 0 {
+		retries = req.MaxRetries
+	}
+
+	for attempt := 0; attempt < retries; attempt++ {
+		slog.Debug("llm attempt starting", "attempt", attempt+1, "max", retries, "provider", p.Name())
 
 		resp, err := p.Generate(ctx, req)
 		if err != nil {

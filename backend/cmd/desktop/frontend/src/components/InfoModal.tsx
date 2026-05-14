@@ -38,13 +38,55 @@ export function InfoModal({ open, onClose }: InfoModalProps) {
           <section className="info-section">
             <div className="info-section-title">Ollama (Local LLM)</div>
             <p className="info-text">
-              Runs open-source models on your machine. No API key required, fully private.
+              Runs open-source models entirely on your machine — no API key, no internet
+              after the one-time model download, 100% private.
             </p>
+
+            <div className="info-platform-label">Step 1 — Install Ollama</div>
+
+            <span className="info-platform-label" style={{ fontSize: 9, borderColor: 'var(--fg-muted)', color: 'var(--fg-muted)', marginTop: 6 }}>macOS</span>
             <ol className="info-steps">
-              <li>Download and install Ollama from <code>ollama.com/download</code></li>
-              <li>In a terminal, start the server: <code>ollama serve</code></li>
-              <li>Pull a model: <code>ollama pull qwen2.5:7b</code></li>
-              <li>Select <strong>Ollama</strong> in the Provider panel, then click <strong>Refresh</strong></li>
+              <li>
+                Download the <code>.dmg</code> from{' '}
+                <code>ollama.com/download</code> and open it,<br />
+                <em>or</em> via Homebrew: <code>brew install ollama</code>
+              </li>
+              <li>The Ollama icon appears in the menu bar — the server starts automatically on <code>http://localhost:11434</code></li>
+            </ol>
+
+            <span className="info-platform-label" style={{ fontSize: 9, borderColor: 'var(--fg-muted)', color: 'var(--fg-muted)', marginTop: 6 }}>Windows</span>
+            <ol className="info-steps">
+              <li>Download <code>OllamaSetup.exe</code> from <code>ollama.com/download</code> and run it</li>
+              <li>Ollama installs as a background service on <code>http://localhost:11434</code> — no extra config needed</li>
+              <li>If Windows Firewall prompts, allow access on <strong>private networks only</strong></li>
+            </ol>
+
+            <div className="info-platform-label">Step 2 — Download a model</div>
+            <p className="info-text">Open a terminal (macOS: Terminal; Windows: PowerShell) and run one of:</p>
+            <ol className="info-steps">
+              <li><code>ollama pull gemma</code> — Google Gemma, fast + great musical JSON <strong>(recommended)</strong></li>
+              <li><code>ollama pull qwen2.5:7b</code> — strong instruction following</li>
+              <li><code>ollama pull llama3.2</code> — lightest, best for CPU-only machines</li>
+              <li><code>ollama pull mistral</code> — solid all-rounder</li>
+            </ol>
+            <p className="info-note">Download is one-time (~2–8 GB). Check installed models: <code>ollama list</code></p>
+
+            <div className="info-platform-label">Step 3 — Start the server</div>
+            <p className="info-text">
+              <strong>macOS:</strong> starts automatically when the menu-bar app launches.<br />
+              <strong>Windows:</strong> starts automatically after installation.<br />
+              To start manually on either platform: <code>ollama serve</code>
+            </p>
+            <p className="info-note">
+              Verify it is running: open a browser or terminal and check{' '}
+              <code>http://localhost:11434/api/tags</code> — you should see a JSON list of your models.
+            </p>
+
+            <div className="info-platform-label">Step 4 — Use with Cadenza</div>
+            <ol className="info-steps">
+              <li>Select <strong>Ollama</strong> in the Provider panel on the left</li>
+              <li>Click <strong>Refresh</strong> — Cadenza will detect the running server and list your models</li>
+              <li>Pick a model from the dropdown and click <strong>Generate</strong></li>
             </ol>
           </section>
 

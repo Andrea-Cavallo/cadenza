@@ -3,14 +3,13 @@ import { GenerationPreview, StepPreview, TrackPreview } from '../types'
 import { isInScale, midiToNoteName, midiToNoteWithOctave, snapToScale } from '../lib/music'
 import { useAudio } from '../hooks/useAudio'
 
-const PITCH_MIN = 33
-const PITCH_MAX = 96
-const PITCH_RANGE = PITCH_MAX - PITCH_MIN   // 63
+const ABS_PITCH_MIN = 33
+const ABS_PITCH_MAX = 96
 const BASE_STEP_W = 18
-const NOTE_H = 12                           // Fixed row height — visible, consistent
-const PIANO_KEY_W = 58                      // Piano keyboard panel width
-const PAD_TOP = 28                          // Bar header height
-const ROLL_SVG_H = PAD_TOP + PITCH_RANGE * NOTE_H  // 784px total
+const NOTE_H = 12
+const PIANO_KEY_W = 58
+const PAD_TOP = 28
+const RANGE_PAD = 12 // octaves of padding around notes
 
 interface PianoRollProps {
   width?: number
@@ -86,6 +85,29 @@ export function PianoRoll({
     return activeTrack
   }, [activeTrack, previewPlaying, previewTrackType, preview])
 
+  // Dynamic pitch range — only show octaves where notes actually exist (+ padding)
+  const { pitchMin, pitchMax, pitchRange } = useMemo(() => {
+    if (!preview) return { pitchMin: ABS_PITCH_MIN, pitchMax: ABS_PITCH_MAX, pitchRange: ABS_PITCH_MAX - ABS_PITCH_MIN }
+    let min = 127, max = 0
+    for (const pattern of preview.patterns) {
+      for (const step of pattern.steps) {
+        if (step.active && step.midi > 0) {
+          if (step.midi < min) min = step.midi
+          if (step.midi > max) max = step.midi
+        }
+      }
+    }
+    if (min > max) return { pitchMin: ABS_PITCH_MIN, pitchMax: ABS_PITCH_MAX, pitchRange: ABS_PITCH_MAX - ABS_PITCH_MIN }
+    min = Math.max(ABS_PITCH_MIN, min - RANGE_PAD)
+    max = Math.min(ABS_PITCH_MAX, max + RANGE_PAD)
+    // Snap to octave boundaries for clean look
+    min = Math.floor(min / 12) * 12
+    max = Math.ceil(max / 12) * 12
+    return { pitchMin: min, pitchMax: max, pitchRange: max - min }
+  }, [preview])
+
+  const rollSvgH = PAD_TOP + pitchRange * NOTE_H
+
   useEffect(() => {
     if (!preview?.patterns.some(p => p.patternType === activeType)) {
       setActiveType(preview?.patterns[0]?.patternType ?? 'bassline')
@@ -93,22 +115,32 @@ export function PianoRoll({
     }
   }, [activeType, preview])
 
-  // Scroll to typical pitch range when switching tracks
+  // Scroll to middle of visible range when switching tracks
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const targetMidi =
-      activeType === 'bassline' ? 43 :
-      activeType === 'arpeggio' ? 60 : 69
-    const rowIdx = PITCH_MAX - 1 - targetMidi
+    if (!activeTrack) return
+    // Find the median active note in the visible track
+    const activeMidis = activeTrack.steps
+      .filter(s => s.active && s.midi > 0)
+      .map(s => s.midi)
+    let targetMidi: number
+    if (activeMidis.length > 0) {
+      activeMidis.sort((a, b) => a - b)
+      targetMidi = activeMidis[Math.floor(activeMidis.length / 2)]
+    } else {
+      targetMidi =
+        activeType === 'bassline' ? 43 :
+        activeType === 'arpeggio' ? 60 : 69
+    }
+    const rowIdx = pitchMax - 1 - targetMidi
     const targetY = PAD_TOP + rowIdx * NOTE_H - el.clientHeight / 2
     el.scrollTop = Math.max(0, targetY)
-  }, [activeType])
+  }, [activeType, pitchMax])
 
   const stepsPerBar = preview?.stepsPerBar ?? 16
   const totalBars = preview?.bars ?? 16
   const totalSteps = Math.max(totalBars * stepsPerBar, activeTrack?.steps.length ?? stepsPerBar)
-  // Full-pattern cycle so playhead sweeps all bars
   const cycleSec = (60 / bpm) * 4 * totalBars
 
   const effectivePlaying = previewPlaying || playing
@@ -133,7 +165,7 @@ export function PianoRoll({
 
   const W = Math.max(width, totalSteps * BASE_STEP_W * zoom)
   const stepW = W / totalSteps
-  const playheadX = t * W  // spans full pattern width
+  const playheadX = t * W
 
   // Note trigger on playhead crossing
   useEffect(() => {
@@ -164,9 +196,16 @@ export function PianoRoll({
   if (!preview || preview.patterns.length === 0) {
     return (
       <div className="real-roll empty-preview">
-        <div className="empty-preview-inner">
+        <div className="empty-preview-inner splash">
+          <div className="splash-frame">
+            <img
+              src="/cadenza.png"
+              alt="Cadenza"
+              className="splash-logo"
+            />
+          </div>
           <div className="empty-preview-title">No MIDI generated yet</div>
-          <div className="empty-preview-copy">Generate a session to inspect Bass, Arp, and Melody notes.</div>
+          <div className="empty-preview-copy">Press Generate to create Bass, Arp, and Melody tracks.</div>
         </div>
       </div>
     )
@@ -183,7 +222,7 @@ export function PianoRoll({
     isBar: step % stepsPerBar === 0,
   }))
 
-  const notes = buildRollNotes(activeTrack, stepW, NOTE_H, PAD_TOP, playheadX, selected)
+  const notes = buildRollNotes(activeTrack, stepW, NOTE_H, PAD_TOP, pitchMax, playheadX, selected)
 
   const updateStep = (index: number, updater: (step: StepPreview) => StepPreview) => {
     if (!preview || !activeTrack) return
@@ -228,7 +267,7 @@ export function PianoRoll({
     if (drag.mode === 'drag') {
       const deltaY = drag.pointerY - svgY(event)
       const deltaMidi = Math.round(deltaY / NOTE_H)
-      const rawMidi = clamp(drag.startMidi + deltaMidi, PITCH_MIN, PITCH_MAX - 1)
+      const rawMidi = clamp(drag.startMidi + deltaMidi, pitchMin, pitchMax - 1)
       const newMidi = snapToScale(rawMidi, effectiveScaleNotes)
       updateStep(drag.index, step => ({
         ...step,
@@ -262,7 +301,7 @@ export function PianoRoll({
     const x = svgX(event)
     const y = svgY(event)
     const clickStep = clamp(Math.floor(x / stepW), 0, totalSteps - 1)
-    const rawMidi = clamp(PITCH_MAX - 1 - Math.floor((y - PAD_TOP) / NOTE_H), PITCH_MIN, PITCH_MAX - 1)
+    const rawMidi = clamp(pitchMax - 1 - Math.floor((y - PAD_TOP) / NOTE_H), pitchMin, pitchMax - 1)
     const newMidi = snapToScale(rawMidi, effectiveScaleNotes)
     const stepIdx = activeTrack.steps.findIndex(s => s.step === clickStep)
     if (stepIdx < 0) return
@@ -375,15 +414,14 @@ export function PianoRoll({
           <svg
             className="piano-keys-svg"
             width={PIANO_KEY_W}
-            height={ROLL_SVG_H}
+            height={rollSvgH}
           >
-            {/* Header padding area */}
             <rect x={0} y={0} width={PIANO_KEY_W} height={PAD_TOP} fill="var(--bg-panel)" />
             <line x1={0} x2={PIANO_KEY_W} y1={PAD_TOP} y2={PAD_TOP}
               stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
 
-            {Array.from({ length: PITCH_RANGE }, (_, i) => {
-              const midi = PITCH_MAX - 1 - i
+            {Array.from({ length: pitchRange }, (_, i) => {
+              const midi = pitchMax - 1 - i
               const noteName = midiToNoteName(midi)
               const noteWithOct = midiToNoteWithOctave(midi)
               const black = isBlackKey(midi)
@@ -395,22 +433,19 @@ export function PianoRoll({
 
               return (
                 <g key={midi}>
-                  {/* Row background */}
                   <rect
                     x={0} y={y}
                     width={PIANO_KEY_W} height={NOTE_H}
                     fill={
-                      inScale ? 'rgba(0,224,255,0.13)' :
+                      inScale ? 'rgba(255,107,43,0.13)' :
                       black   ? '#090C13' : '#111620'
                     }
                   />
-                  {/* Left key stripe: black vs white indicator */}
                   <rect
                     x={0} y={y}
                     width={black ? 11 : 6} height={NOTE_H}
                     fill={black ? '#050709' : 'rgba(255,255,255,0.06)'}
                   />
-                  {/* Separator line — stronger on C */}
                   {!black && (
                     <line
                       x1={6} x2={PIANO_KEY_W}
@@ -419,13 +454,12 @@ export function PianoRoll({
                       strokeWidth={isC ? 1 : 0.5}
                     />
                   )}
-                  {/* Note label: always show C notes, show scale notes when they fit */}
                   {(isC || inScale) && (
                     <text
                       x={PIANO_KEY_W - 5}
                       y={y + NOTE_H - 3}
                       textAnchor="end"
-                      fill={inScale ? 'rgba(0,224,255,0.88)' : 'rgba(255,255,255,0.42)'}
+                      fill={inScale ? 'rgba(255,107,43,0.88)' : 'rgba(255,255,255,0.42)'}
                       fontFamily="JetBrains Mono, monospace"
                       fontSize={isC ? 9 : 8}
                       fontWeight={isC ? 700 : 400}
@@ -443,15 +477,15 @@ export function PianoRoll({
             ref={svgRef}
             className="roll-svg"
             width={W}
-            height={ROLL_SVG_H}
-            viewBox={`0 0 ${W} ${ROLL_SVG_H}`}
+            height={rollSvgH}
+            viewBox={`0 0 ${W} ${rollSvgH}`}
             onPointerMove={continueEdit}
             onPointerUp={finishEdit}
             onPointerCancel={finishEdit}
           >
             {/* Scale row backgrounds */}
-            {Array.from({ length: PITCH_RANGE }, (_, i) => {
-              const midi = PITCH_MAX - 1 - i
+            {Array.from({ length: pitchRange }, (_, i) => {
+              const midi = pitchMax - 1 - i
               const inScale = effectiveScaleNotes.length > 0
                 ? isInScale(midiToNoteName(midi), effectiveScaleNotes)
                 : true
@@ -467,22 +501,28 @@ export function PianoRoll({
             })}
 
             {/* Octave separator lines */}
-            {Array.from({ length: 8 }, (_, i) => {
-              const p = 36 + i * 12
-              if (p < PITCH_MIN || p > PITCH_MAX) return null
-              const y = PAD_TOP + (PITCH_MAX - p) * NOTE_H
-              return (
-                <line key={`oct${i}`} x1={0} x2={W} y1={y} y2={y}
-                  stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
-              )
-            })}
+            {(() => {
+              const lines = []
+              for (let p = pitchMin; p <= pitchMax; p++) {
+                if (p % 12 !== 0) continue
+                // y from top of the highest visible note (pitchMax-1) down to p
+                const rowIdx = pitchMax - 1 - p
+                const y = PAD_TOP + rowIdx * NOTE_H
+                if (y < PAD_TOP || y > rollSvgH) continue
+                lines.push(
+                  <line key={`oct${p}`} x1={0} x2={W} y1={y} y2={y}
+                    stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
+                )
+              }
+              return lines
+            })()}
 
             {/* Vertical grid lines */}
             {grids.map((g, i) => (
               <line
                 key={`g${i}`}
                 x1={g.x} x2={g.x}
-                y1={PAD_TOP} y2={ROLL_SVG_H}
+                y1={PAD_TOP} y2={rollSvgH}
                 stroke={
                   g.isBar  ? 'rgba(255,255,255,0.22)' :
                   g.isBeat ? 'rgba(255,255,255,0.08)' :
@@ -509,7 +549,7 @@ export function PianoRoll({
             {/* Transparent canvas — click empty space to toggle a note */}
             <rect
               x={0} y={PAD_TOP}
-              width={W} height={ROLL_SVG_H - PAD_TOP}
+              width={W} height={rollSvgH - PAD_TOP}
               fill="transparent"
               style={{ cursor: drag ? 'default' : 'crosshair' }}
               onPointerDown={handleCanvasPointerDown}
@@ -522,7 +562,6 @@ export function PianoRoll({
               const edge = Math.min(14, Math.max(8, note.w / 4))
               return (
                 <g key={note.key} className={`roll-note ${note.selected ? 'selected' : ''}`}>
-                  {/* Main note body */}
                   <rect
                     x={note.x + 1} y={note.y + 1}
                     width={Math.max(note.w - 1, 3)} height={nh}
@@ -532,7 +571,6 @@ export function PianoRoll({
                     style={{ cursor: 'grab' }}
                     onPointerDown={event => startEdit(event, note)}
                   />
-                  {/* Left resize handle */}
                   <rect
                     x={note.x + 1} y={note.y + 1}
                     width={edge} height={nh}
@@ -540,7 +578,6 @@ export function PianoRoll({
                     style={{ cursor: 'w-resize', pointerEvents: 'all' }}
                     onPointerDown={event => startEdit(event, note)}
                   />
-                  {/* Right resize handle */}
                   <rect
                     x={note.x + note.w - edge} y={note.y + 1}
                     width={edge} height={nh}
@@ -548,7 +585,6 @@ export function PianoRoll({
                     style={{ cursor: 'e-resize', pointerEvents: 'all' }}
                     onPointerDown={event => startEdit(event, note)}
                   />
-                  {/* Legato arrow */}
                   {note.legato && (
                     <polygon
                       points={`${note.x + note.w + 1},${note.y + nh * 0.25 + 1} ${note.x + note.w + 5},${note.y + nh * 0.5 + 1} ${note.x + note.w + 1},${note.y + nh * 0.75 + 1}`}
@@ -557,7 +593,6 @@ export function PianoRoll({
                       pointerEvents="none"
                     />
                   )}
-                  {/* Note label — only when note is wide enough */}
                   {note.w > 26 && (
                     <text
                       x={note.x + 8} y={note.y + nh - 2}
@@ -578,7 +613,7 @@ export function PianoRoll({
               <>
                 <line
                   x1={playheadX} x2={playheadX}
-                  y1={PAD_TOP - 4} y2={ROLL_SVG_H}
+                  y1={PAD_TOP - 4} y2={rollSvgH}
                   stroke="var(--accent)" strokeWidth={1.5}
                 />
                 <circle cx={playheadX} cy={PAD_TOP - 4} r={3} fill="var(--accent)" />
@@ -658,7 +693,7 @@ export function PianoRoll({
     const svg = svgRef.current
     if (!svg) return 0
     const rect = svg.getBoundingClientRect()
-    return clamp(((event.clientY - rect.top) / rect.height) * ROLL_SVG_H, 0, ROLL_SVG_H)
+    return clamp(((event.clientY - rect.top) / rect.height) * rollSvgH, 0, rollSvgH)
   }
 }
 
@@ -667,6 +702,7 @@ function buildRollNotes(
   stepW: number,
   noteH: number,
   padTop: number,
+  pitchMax: number,
   playheadX: number,
   selected: SelectedNote | null,
 ) {
@@ -679,7 +715,8 @@ function buildRollNotes(
       const baseW = Math.max(stepW * durationSteps - 2, 5)
       const w = step.staccato ? Math.max(baseW * 0.5, 4) : baseW
       const x = step.step * stepW
-      const y = padTop + (PITCH_MAX - clamp(step.midi, PITCH_MIN, PITCH_MAX)) * noteH
+      // Fixed: PITCH_MAX - 1 - midi (was PITCH_MAX - midi, which was off by one row)
+      const y = padTop + (pitchMax - 1 - clamp(step.midi, 0, 127)) * noteH
       const h = Math.max(noteH - 1, 4)
       const active = playheadX >= x && playheadX < x + w
       const isSelected = selected?.patternType === track.patternType && selected.index === index

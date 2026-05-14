@@ -1,5 +1,6 @@
-import { Dispatch, SetStateAction, useEffect, useState } from 'react'
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react'
 import { GenerateRequest, GenerateResult, GenerationPreview, Params, ProviderStatus } from './types'
+import { providerLabel } from './lib/labels'
 
 // @ts-ignore
 import * as AppService from '../wailsjs/go/main/AppService'
@@ -44,13 +45,35 @@ export function useGenerator({
 }: UseGeneratorArgs) {
   const [statusLoading, setStatusLoading] = useState(false)
   const [pulling, setPulling] = useState(false)
+  const [generationStep, setGenerationStep] = useState('')
+  const logQueue = useRef<string[]>([])
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Batch log lines: collect in ref, flush every 100ms to avoid O(n) copies
+  const enqueueLog = (msg: string) => {
+    logQueue.current.push(msg)
+    if (flushTimer.current) return
+    flushTimer.current = setTimeout(() => {
+      const batch = logQueue.current
+      logQueue.current = []
+      flushTimer.current = null
+      setLog(prev => [...prev, ...batch])
+    }, 100)
+  }
+
+  // Track progress from backend events
+  const enqueueProgress = (msg: string) => {
+    setGenerationStep(msg)
+    enqueueLog(msg)
+  }
 
   useEffect(() => {
-    const off = EventsOn('progress', (msg: string) => setLog(prev => [...prev, msg]))
-    const offLog = EventsOn('log', (msg: string) => setLog(prev => [...prev, msg]))
+    const off = EventsOn('progress', (msg: string) => enqueueProgress(msg))
+    const offLog = EventsOn('log', (msg: string) => enqueueLog(msg))
     return () => {
       if (typeof off === 'function') off()
       if (typeof offLog === 'function') offLog()
+      if (flushTimer.current) clearTimeout(flushTimer.current)
     }
   }, [setLog])
 
@@ -165,6 +188,7 @@ export function useGenerator({
 
     setRunning(true)
     setLog([])
+    setGenerationStep('Starting...')
     setFiles([])
     setFilesAlt([])
     setPreview(null)
@@ -270,6 +294,7 @@ export function useGenerator({
   return {
     statusLoading,
     pulling,
+    generationStep,
     modelChoices,
     canGenerate,
     refreshProvider,
@@ -341,19 +366,4 @@ function formatOperationalError(message: string, params: Params): string[] {
     `Error: ${details}`,
     'Action: open the log drawer for details. If the selected provider keeps failing, switch to Offline and retry.',
   ]
-}
-
-function providerLabel(provider: string): string {
-  switch (provider) {
-    case 'claude':
-      return 'Claude'
-    case 'openai':
-      return 'OpenAI'
-    case 'gemini':
-      return 'Gemini'
-    case 'ollama':
-      return 'Ollama'
-    default:
-      return provider || 'Provider'
-  }
 }

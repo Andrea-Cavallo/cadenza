@@ -42,17 +42,30 @@ type MusicContext struct {
 
 // SingleGenerator handles one pattern type generation via LLM with caching.
 type SingleGenerator struct {
-	provider  llm.Provider
-	validator *schema.Validator
-	cache     *cache.Cache
-	promptDir string
+	provider    llm.Provider
+	validator   *schema.Validator
+	cache       *cache.Cache
+	promptDir   string
+	temperature float64
+	maxRetries  int
 }
 
 func NewGenerator(provider llm.Provider, validator *schema.Validator, c *cache.Cache) *SingleGenerator {
 	return &SingleGenerator{
-		provider:  provider,
-		validator: validator,
-		cache:     c,
+		provider:    provider,
+		validator:   validator,
+		cache:       c,
+		temperature: 0.3,
+		maxRetries:  3,
+	}
+}
+
+func (g *SingleGenerator) SetLLMParams(temperature float64, maxRetries int) {
+	if temperature > 0 {
+		g.temperature = temperature
+	}
+	if maxRetries > 0 {
+		g.maxRetries = maxRetries
 	}
 }
 
@@ -162,8 +175,9 @@ func (g *SingleGenerator) Generate(ctx context.Context, musicCtx MusicContext, p
 		OutputSchema:     []byte(schemaExample),
 		SchemaProperties: schemaProps,    // REFACTOR.md point 1: Pass pre-generated schema
 		SchemaRequired:   schemaRequired, // REFACTOR.md point 1: Pass required fields
-		Temperature:      0.3,
+		Temperature:      g.temperature,
 		MaxTokens:        4096,
+		MaxRetries:       g.maxRetries,
 	}
 
 	validate := func(raw []byte) error {

@@ -1,63 +1,56 @@
-# Build output
+# ── Go ──────────────────────────────────────────────
 bin/
-dist/
 *.exe
-*.exe~
-*.dll
 *.so
 *.dylib
+*.test
+*.out
+*.prof
+vendor/
 
-# MIDI output
+# ── Build output ─────────────────────────────────────
+dist/
+
+# ── MIDI output ──────────────────────────────────────
 output/
 *.mid
 
-# Test and coverage
+# ── Test & coverage ──────────────────────────────────
 coverage.out
 coverage.html
-*.test
 
-# Debug
-debug/
-
-# Cache
+# ── Cache ────────────────────────────────────────────
 .cache/
 
-# Desktop frontend
+# ── Desktop frontend (Vite + React) ──────────────────
 backend/cmd/desktop/frontend/dist/
 backend/cmd/desktop/frontend/node_modules/
 backend/cmd/desktop/frontend/wailsjs/
 backend/cmd/desktop/frontend/package.json.md5
-backend/cmd/desktop/build/bin/
 
-# IDE
+# ── Wails build ──────────────────────────────────────
+backend/cmd/desktop/build/bin/
+backend/cmd/desktop/build/*.syso
+
+# ── Logs ─────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE / Editor ─────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# Environment
+# ── Environment ──────────────────────────────────────
 .env
 .env.local
+.env.*.local
 
-# OS
+# ── OS ───────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-Desktop.ini
-ehthumbs.db
 
-# Token save (local tool)
-.tokensave/
-
-# Internal docs (not shipped)
-SPECS.md
-TODO.md
-docs/
-
-# Claude Code / AI
-.claude/
-# Git worktrees
+# ── Git worktrees ────────────────────────────────────
 .worktrees/
-
-CLAUDE.md
-AGENTS.md

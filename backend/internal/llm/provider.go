@@ -20,6 +20,7 @@ type GenerateRequest struct {
 	SchemaRequired   []string       // REFACTOR.md point 1: Pre-generated required fields list
 	Temperature      float64
 	MaxTokens        int
+	MaxRetries       int // 0 = use default (3)
 }
 
 // Message is a single chat message (role + content) in the LLM conversation.

@@ -189,6 +189,19 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("session.max_sessions", 20)
 }
 
+// DefaultConfig returns a config with Viper defaults + env vars (no file read).
+// Use this as a fallback when config.Load() fails.
+func DefaultConfig() *AppConfig {
+	v := viper.New()
+	setDefaults(v)
+	v.SetEnvPrefix("CADENZA")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	var cfg AppConfig
+	_ = v.Unmarshal(&cfg)
+	return &cfg
+}
+
 func (c *AppConfig) Validate() error {
 	var errs []string
 

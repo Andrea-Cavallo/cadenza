@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/Andrea-Cavallo/cadenza/internal/cache"
 	"github.com/Andrea-Cavallo/cadenza/internal/llm"
@@ -20,13 +19,16 @@ import (
 
 // Config holds generation parameters for the GenerateAll entry point.
 type Config struct {
-	BPM       float64
-	Key       theory.Key
-	Provider  string
-	Model     string
-	NoLLM     bool
-	OutputDir string
-	Timestamp string
+	BPM            float64
+	Key            theory.Key
+	Provider       string
+	Model          string
+	NoLLM          bool
+	OutputDir      string
+	Timestamp      string
+	Temperature    float64 // 0.0 = use default (0.3)
+	MaxRetries     int     // 0 = use default (3)
+	TimeoutSeconds int     // 0 = use default (30)
 }
 
 // PatternResult holds the output file path and note count for a single pattern.
@@ -52,17 +54,20 @@ type patternResult struct {
 
 // MultiGenerator orchestrates parallel generation of 3 pattern types with fallback.
 type MultiGenerator struct {
-	provider  llm.Provider
-	validator *schema.Validator
-	registry  *styleprofile.Registry
-	renderer  *renderer.Renderer
-	writer    *midipkg.Writer
-	cache     *cache.Cache
-	outputDir  string
-	NoLLM      bool
-	Sequential bool // run patterns one-at-a-time (needed for local Ollama which queues requests)
-	warnMu     sync.Mutex
-	warnings   []string
+	provider       llm.Provider
+	validator      *schema.Validator
+	registry       *styleprofile.Registry
+	renderer       *renderer.Renderer
+	writer         *midipkg.Writer
+	cache          *cache.Cache
+	outputDir      string
+	NoLLM          bool
+	Sequential     bool // run patterns one-at-a-time (needed for local Ollama which queues requests)
+	temperature    float64
+	maxRetries     int
+	timeoutSeconds int
+	warnMu         sync.Mutex
+	warnings       []string
 }
 
 func (mg *MultiGenerator) addWarning(msg string) {
@@ -93,13 +98,29 @@ func NewMultiGenerator(
 	outputDir string,
 ) *MultiGenerator {
 	return &MultiGenerator{
-		provider:  provider,
-		validator: validator,
-		registry:  registry,
-		renderer:  rend,
-		writer:    writer,
-		cache:     cache.New(30, ".cache"), // 30-day TTL
-		outputDir: outputDir,
+		provider:       provider,
+		validator:      validator,
+		registry:       registry,
+		renderer:       rend,
+		writer:         writer,
+		cache:          cache.New(30, ".cache"), // 30-day TTL
+		outputDir:      outputDir,
+		temperature:    0.3,
+		maxRetries:     3,
+		timeoutSeconds: 30,
+	}
+}
+
+// SetLLMOverrides allows setting temperature, max retries, and timeout from config.
+func (mg *MultiGenerator) SetLLMOverrides(temperature float64, maxRetries, timeoutSeconds int) {
+	if temperature > 0 {
+		mg.temperature = temperature
+	}
+	if maxRetries > 0 {
+		mg.maxRetries = maxRetries
+	}
+	if timeoutSeconds > 0 {
+		mg.timeoutSeconds = timeoutSeconds
 	}
 }
 
@@ -150,12 +171,11 @@ func (mg *MultiGenerator) GeneratePartWithContext(ctx context.Context, musicCtx 
 		return nil, err
 	}
 
-	ts := time.Now().Format("20060102_150405")
 	keyStr := musicCtx.Key.Root
 	if musicCtx.Key.Mode == "minor" {
 		keyStr += "m"
 	}
-	path, err := mg.renderAndSave(patternType, spec, keyStr, ts, varNum, musicCtx.BPM)
+	path, err := mg.renderAndSave(patternType, spec, keyStr, musicCtx.VariationSeed, varNum, musicCtx.BPM)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +213,6 @@ func patternTypesForContext(musicCtx MusicContext, noLLM bool) []string {
 func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicContext, varNum int) (*GenerationResult, error) {
 	mg.clearWarnings()
 	metrics.GenerationsTotal.Add(1)
-	ts := time.Now().Format("20060102_150405")
 
 	slog.Debug("generation starting",
 		"variation", varNum,
@@ -276,7 +295,7 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 		keyStr += "m"
 	}
 	for _, pt := range patternTypes {
-		path, err := mg.renderAndSaveNamed(pt, patterns[pt], keyStr, ts, varNum, musicCtx.BPM)
+		path, err := mg.renderAndSaveNamed(pt, patterns[pt], keyStr, musicCtx.VariationSeed, varNum, musicCtx.BPM)
 		if err != nil {
 			return nil, err
 		}
@@ -293,7 +312,7 @@ func (mg *MultiGenerator) generateInternal(ctx context.Context, musicCtx MusicCo
 }
 
 // renderAndSave renders a single pattern spec and writes the MIDI file. Returns the output path.
-func (mg *MultiGenerator) renderAndSave(pt string, spec *schema.PatternSpec, keyStr, ts string, varNum int, bpm float64) (string, error) {
+func (mg *MultiGenerator) renderAndSave(pt string, spec *schema.PatternSpec, keyStr, seed string, varNum int, bpm float64) (string, error) {
 	profile, err := mg.registry.LoadForType(pt, spec.StyleProfile)
 	if err != nil {
 		slog.Debug("custom profile not found, using default", "type", pt, "requested", spec.StyleProfile, "error", err)
@@ -310,11 +329,7 @@ func (mg *MultiGenerator) renderAndSave(pt string, spec *schema.PatternSpec, key
 	}
 	slog.Debug("rendered", "type", pt, "events", len(events))
 
-	suffix := ""
-	if varNum > 1 {
-		suffix = fmt.Sprintf("_v%d", varNum)
-	}
-	filename := fmt.Sprintf("%s_%s_%s_%.0f_%s%s.mid", "output", pt, keyStr, bpm, ts, suffix)
+	filename := midiFilename(pt, keyStr, bpm, varNum, seed)
 	outputPath := filepath.Join(mg.outputDir, filename)
 
 	if err := mg.writer.WriteFile(outputPath, events); err != nil {
@@ -347,7 +362,7 @@ func stemName(patternType string) string {
 }
 
 // renderAndSaveNamed is like renderAndSave but uses stem-specific file names for 7-stem bundles.
-func (mg *MultiGenerator) renderAndSaveNamed(pt string, spec *schema.PatternSpec, keyStr, ts string, varNum int, bpm float64) (string, error) {
+func (mg *MultiGenerator) renderAndSaveNamed(pt string, spec *schema.PatternSpec, keyStr, seed string, varNum int, bpm float64) (string, error) {
 	profile, err := mg.registry.LoadForType(pt, spec.StyleProfile)
 	if err != nil {
 		slog.Debug("custom profile not found, using default", "type", pt, "requested", spec.StyleProfile, "error", err)
@@ -364,11 +379,7 @@ func (mg *MultiGenerator) renderAndSaveNamed(pt string, spec *schema.PatternSpec
 	}
 	slog.Debug("rendered", "type", pt, "events", len(events))
 
-	suffix := ""
-	if varNum > 1 {
-		suffix = fmt.Sprintf("_v%d", varNum)
-	}
-	filename := fmt.Sprintf("output_%s_%s_%.0f_%s%s.mid", stemName(pt), keyStr, bpm, ts, suffix)
+	filename := midiFilename(stemName(pt), keyStr, bpm, varNum, seed)
 	outputPath := filepath.Join(mg.outputDir, filename)
 
 	if err := mg.writer.WriteFile(outputPath, events); err != nil {
@@ -390,6 +401,7 @@ func (mg *MultiGenerator) generatePattern(ctx context.Context, musicCtx MusicCon
 
 	metrics.LLMCalls.Add(1)
 	gen := NewGenerator(mg.provider, mg.validator, mg.cache)
+	gen.SetLLMParams(mg.temperature, mg.maxRetries)
 	spec, err := gen.Generate(ctx, musicCtx, patternType)
 	if err != nil {
 		metrics.LLMErrors.Add(1)
@@ -442,9 +454,23 @@ func buildProvider(cfg Config) (llm.Provider, error) {
 		return llm.NewClaudeProvider(cfg.Model)
 	case "ollama":
 		return llm.NewOllamaProvider("http://localhost:11434", cfg.Model), nil
+	case "openai":
+		return llm.NewOpenAIProvider(cfg.Model)
+	case "gemini":
+		return llm.NewGeminiProvider(cfg.Model)
 	default:
 		return nil, fmt.Errorf("unknown provider %q", cfg.Provider)
 	}
+}
+
+// midiFilename builds a clean, reproducible filename:
+// cadenza_bass_Am_122_v1_s847261.mid
+func midiFilename(stem, key string, bpm float64, varNum int, seed string) string {
+	shortSeed := seed
+	if len(shortSeed) > 6 {
+		shortSeed = shortSeed[:6]
+	}
+	return fmt.Sprintf("cadenza_%s_%s_%.0f_v%d_s%s.mid", stem, key, bpm, varNum, shortSeed)
 }
 
 func modeFlag(k theory.Key) string {

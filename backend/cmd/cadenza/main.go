@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Andrea-Cavallo/cadenza/internal/config"
@@ -33,6 +34,7 @@ type lastRunInfo struct {
 }
 
 var lastRun lastRunInfo
+var lastRunMu sync.Mutex
 var activeStore *session.FileSessionStore
 var checkpointCounter int
 
@@ -44,19 +46,9 @@ func main() {
 	// Load config from cadenza.yaml / env vars via Viper
 	appCfg, cfgErr := config.Load()
 	if cfgErr != nil {
-		fmt.Fprintf(os.Stderr, "Warning: config load: %v (using defaults)\n", cfgErr)
-		appCfg = &config.AppConfig{}
-		appCfg.Audio.BPM = 122
-		appCfg.Audio.Key = "Am"
-		appCfg.Audio.Bars = 16
-		appCfg.Audio.Variations = 1
-		appCfg.Audio.Groove = "straight"
-		appCfg.LLM.Provider = "claude"
-		appCfg.LLM.Model = "claude-opus-4-7"
-		appCfg.Output.Dir = "output"
-		appCfg.Logging.Level = "info"
-		appCfg.Logging.Format = "text"
-		appCfg.Logging.File = "cadenza.log"
+		fmt.Fprintf(os.Stderr, "Warning: config load: %v (using defaults from env)\n", cfgErr)
+		// Use DefaultConfig() which respects env vars instead of a hardcoded struct
+		appCfg = config.DefaultConfig()
 	}
 
 	// CLI flags override config values
@@ -86,6 +78,7 @@ func main() {
 	devFlag := flag.Bool("dev", false, "Interactive dev mode REPL")
 	doctorFlag := flag.Bool("doctor", false, "Run diagnostics: Go version, API keys, Ollama, output directory")
 	nonInteractiveFlag := flag.Bool("non-interactive", false, "Non-interactive mode: require --bpm and --key, skip TUI")
+	noColorFlag := flag.Bool("no-color", false, "Disable ANSI color output")
 
 	resumeFlag := flag.Bool("resume", false, "Riprendi l'ultima sessione salvata")
 	resumeIDFlag := flag.String("resume-id", "", "ID sessione specifica da riprendere")
@@ -94,6 +87,11 @@ func main() {
 	checkpointIntervalFlag := flag.Int("checkpoint-interval", 0, "Salva ogni N generazioni (0 = usa config)")
 
 	flag.Parse()
+
+	// Honor --no-color flag
+	if *noColorFlag {
+		os.Setenv("NO_COLOR", "1")
+	}
 
 	if *versionFlag {
 		fmt.Printf("cadenza %s\n", version)
@@ -168,6 +166,9 @@ func main() {
 		presetCfg.Drums = *drumsFlag
 		presetCfg.DryRun = *dryRunFlag
 		presetCfg.JSONOutput = *jsonFlag
+		presetCfg.LLMTemperature = appCfg.LLM.Temperature
+		presetCfg.LLMMaxRetries = appCfg.LLM.MaxRetries
+		presetCfg.LLMTimeout = appCfg.LLM.Timeout
 		if presetCfg.Model == "" {
 			presetCfg.Model = resolveDefaultModel(presetCfg.ProviderName, appCfg)
 		}
@@ -210,6 +211,9 @@ func main() {
 			DryRun:       *dryRunFlag,
 			JSONOutput:   *jsonFlag,
 			OfflineStyle: *offlineStyleFlag,
+			LLMTemperature: appCfg.LLM.Temperature,
+			LLMMaxRetries:  appCfg.LLM.MaxRetries,
+			LLMTimeout:     appCfg.LLM.Timeout,
 		}
 		if cfg.Model == "" {
 			cfg.Model = resolveDefaultModel(cfg.ProviderName, appCfg)
@@ -270,8 +274,11 @@ func handlePostRunAction(cfg cliConfig) bool {
 			// Same harmony (lock progression), new motifs (new seed)
 			locked := cfg
 			locked.Seed = nil
-			if lastRun.ProgCLI != "" {
-				locked.Progression = lastRun.ProgCLI
+			lastRunMu.Lock()
+			progCLI := lastRun.ProgCLI
+			lastRunMu.Unlock()
+			if progCLI != "" {
+				locked.Progression = progCLI
 			}
 			fmt.Printf("\n  %s-> Locked progression: %s%s\n\n", ansiGreen, locked.Progression, ansiReset)
 			runGeneration(locked)
@@ -327,8 +334,11 @@ func handlePostRunAction(cfg cliConfig) bool {
 		case "9":
 			transposed := cfg
 			transposed.Key = adjacentKey(cfg.Key)
-			if lastRun.Seed != "" {
-				if seedPtr, ok := seedPtrFromString(lastRun.Seed); ok {
+			lastRunMu.Lock()
+			lastSeed := lastRun.Seed
+			lastRunMu.Unlock()
+			if lastSeed != "" {
+				if seedPtr, ok := seedPtrFromString(lastSeed); ok {
 					transposed.Seed = seedPtr
 				}
 			}
@@ -349,11 +359,14 @@ func handlePostRunAction(cfg cliConfig) bool {
 			runSinglePartAction(cfg, "melody")
 
 		case "l", "lock":
-			if lastRun.ProgCLI == "" {
+			lastRunMu.Lock()
+			progCLI := lastRun.ProgCLI
+			lastRunMu.Unlock()
+			if progCLI == "" {
 				fmt.Printf("  %s-> No prior progression available to lock%s\n", ansiRed, ansiReset)
 				continue
 			}
-			cfg.Progression = lastRun.ProgCLI
+			cfg.Progression = progCLI
 			fmt.Printf("\n  %s-> Progression locked: %s%s\n\n", ansiGreen, cfg.Progression, ansiReset)
 
 		case "q", "quit", "exit":
@@ -534,6 +547,7 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 	w := midipkg.NewWriter(cfg.BPM)
 
 	mg := generator.NewMultiGenerator(provider, v, reg, rend, w, cfg.OutputDir)
+	mg.SetLLMOverrides(cfg.LLMTemperature, cfg.LLMMaxRetries, cfg.LLMTimeout)
 	mg.NoLLM = cfg.NoLLM
 
 	// Override chord progression if custom one is provided
@@ -613,8 +627,8 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 
 	// Dump specs if requested
 	if cfg.DumpSpec != "" {
-		// TODO: implement spec dumping (result needs to expose specs)
-		slog.Info("spec dumping requested but not yet implemented", "dir", cfg.DumpSpec)
+		slog.Warn("--dump-spec is not yet implemented", "dir", cfg.DumpSpec)
+		fmt.Fprintf(os.Stderr, "Warning: --dump-spec is not yet fully implemented. Specs will not be written.\n")
 	}
 
 	// Add drums if requested
@@ -627,8 +641,8 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 	// Write output (single file or multiple files)
 	var outputFiles []string
 	if cfg.SingleFile {
-		// TODO: implement Type-1 writing
-		slog.Warn("--single-file not yet fully implemented, falling back to separate files")
+		slog.Warn("--single-file is not yet fully implemented, using separate files")
+		fmt.Fprintf(os.Stderr, "Warning: --single-file is not yet fully implemented. Writing separate files instead.\n")
 		outputFiles = result.Files
 	} else {
 		outputFiles = result.Files
@@ -636,7 +650,9 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 
 	if cfg.JSONOutput {
 		printGenerationJSON(cfg, seedStr, progressionToCLIString(prog), outputFiles, false, "")
+		lastRunMu.Lock()
 		lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key, Files: outputFiles}
+		lastRunMu.Unlock()
 		slog.Info("session complete", "files", len(outputFiles), "seed", seedStr, "bars", cfg.Bars)
 		return nil
 	}
@@ -666,7 +682,9 @@ func runSingleGeneration(ctx context.Context, cfg cliConfig, varNum int, seedStr
 	fmt.Printf("  %sReproduce:%s  %s%s%s\n", ansiBold, ansiReset, ansiCyan, reproduceCmd(cfg, seedStr), ansiReset)
 	fmt.Printf("  %s           Run this command again to recreate these exact patterns.%s\n\n", ansiDim, ansiReset)
 
+	lastRunMu.Lock()
 	lastRun = lastRunInfo{Seed: seedStr, ProgCLI: progressionToCLIString(prog), BPM: cfg.BPM, Key: cfg.Key, Files: outputFiles}
+	lastRunMu.Unlock()
 	slog.Info("session complete", "files", len(outputFiles), "seed", seedStr, "bars", cfg.Bars)
 
 	checkpointCounter++
@@ -784,13 +802,16 @@ func progressionStringForLog(prog theory.ChordProgression) string {
 }
 
 func trackLabel(filename string) string {
+	base := filepath.Base(filename)
 	switch {
-	case strings.Contains(filename, "bassline"):
+	case strings.Contains(base, "bass"):
 		return "[Bassline]"
-	case strings.Contains(filename, "arpeggio"):
+	case strings.Contains(base, "arp"):
 		return "[Arpeggio]"
-	case strings.Contains(filename, "melody"):
+	case strings.Contains(base, "melody") || strings.Contains(base, "lead"):
 		return "[Melody]"
+	case strings.Contains(base, "chord") || strings.Contains(base, "pad"):
+		return "[Chord Pad]"
 	default:
 		return "[Track]"
 	}

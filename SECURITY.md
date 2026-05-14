@@ -17,11 +17,12 @@ If you discover a security vulnerability, please report it responsibly:
 ## Scope
 
 This project handles:
-- API keys (Anthropic, Ollama) — stored only in environment variables, never logged
+- API keys (Anthropic, OpenAI, Gemini) — stored only in environment variables, never logged
 - File system writes (MIDI output) — restricted to the output directory
 - HTTP calls to LLM providers — no user data beyond prompts
+- Wails desktop app — runs locally, uses Wails v2 runtime with `Assets` embedded from frontend `dist/`. No network listener exposed. Wails bindings are local Go function calls, not HTTP.
 
 The project does NOT handle:
 - User authentication
 - Personal data
-- Network-facing services (it's a CLI tool)
+- Network-facing services (the Wails desktop app is local-only, no server port)

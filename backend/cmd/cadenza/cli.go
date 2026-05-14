@@ -13,20 +13,35 @@ import (
 	"github.com/Andrea-Cavallo/cadenza/internal/theory"
 )
 
-// ANSI escape codes.
-const (
-	ansiReset   = "\033[0m"
-	ansiBold    = "\033[1m"
-	ansiDim     = "\033[2m"
-	ansiRed     = "\033[31m"
-	ansiGreen   = "\033[32m"
-	ansiYellow  = "\033[33m"
-	ansiMagenta = "\033[35m"
-	ansiCyan    = "\033[36m"
-	ansiWhite   = "\033[97m"
+// ANSI escape codes — set to empty when NO_COLOR is defined.
+var (
+	ansiReset   string
+	ansiBold    string
+	ansiDim     string
+	ansiRed     string
+	ansiGreen   string
+	ansiYellow  string
+	ansiMagenta string
+	ansiCyan    string
+	ansiWhite   string
 )
 
-const sepLine = "  " + ansiCyan +
+func init() {
+	if os.Getenv("NO_COLOR") != "" {
+		return
+	}
+	ansiReset = "\033[0m"
+	ansiBold = "\033[1m"
+	ansiDim = "\033[2m"
+	ansiRed = "\033[31m"
+	ansiGreen = "\033[32m"
+	ansiYellow = "\033[33m"
+	ansiMagenta = "\033[35m"
+	ansiCyan = "\033[36m"
+	ansiWhite = "\033[97m"
+}
+
+var sepLine = "  " + ansiCyan +
 	"------------------------------------------------------" +
 	ansiReset
 
@@ -52,19 +67,31 @@ type cliConfig struct {
 	JSONOutput   bool   // machine-readable stdout summary
 	OfflineStyle string // hypnotic | driving | minimal | melodic
 	Interactive  bool   // true when launched from the interactive TUI
+	LLMTemperature float64
+	LLMMaxRetries  int
+	LLMTimeout     int
 }
 
 var stdinReader = bufio.NewReader(os.Stdin)
+var onStdinEOF = func() { os.Exit(0) }
 
 func ask(label string) string {
 	fmt.Printf("  %s%s%s > ", ansiBold, label, ansiReset)
-	line, _ := stdinReader.ReadString('\n')
+	line, err := stdinReader.ReadString('\n')
+	if err != nil {
+		onStdinEOF()
+		return ""
+	}
 	return strings.TrimSpace(line)
 }
 
 func askDefault(label, def string) string {
 	fmt.Printf("  %s%s%s [%s%s%s] > ", ansiBold, label, ansiReset, ansiCyan, def, ansiReset)
-	line, _ := stdinReader.ReadString('\n')
+	line, err := stdinReader.ReadString('\n')
+	if err != nil {
+		onStdinEOF()
+		return def
+	}
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return def
@@ -345,6 +372,9 @@ func applyQuickStartDefaults(cfg *cliConfig) {
 	cfg.BPM = 122
 	cfg.Key = "Am"
 	cfg.OutputDir = defaultOutputDir()
+	cfg.LLMTemperature = 0.3
+	cfg.LLMMaxRetries = 3
+	cfg.LLMTimeout = 30
 }
 
 // selectMode asks the user for session mode (AI / offline / quit).
@@ -431,7 +461,9 @@ func selectLLMEngine(cfg *cliConfig) bool {
 			}
 		}
 		masked := apiKey[:min(8, len(apiKey))] + "..."
-		fmt.Printf("  %sOK  %s%s  %s%s%s\n", ansiGreen+ansiBold, providerEnvVar(cfg.ProviderName), ansiReset, ansiDim, masked, ansiReset)
+		if !cfg.JSONOutput {
+			fmt.Printf("  %sOK  %s%s  %s%s%s\n", ansiGreen+ansiBold, providerEnvVar(cfg.ProviderName), ansiReset, ansiDim, masked, ansiReset)
+		}
 		cfg.Model = askDefault("Model", cfg.Model)
 		fmt.Println()
 	} else {
@@ -629,13 +661,13 @@ func defaultOutputDir() string {
 
 func ensureWritableDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("cannot create output directory %q: %w", dir, err)
+		return fmt.Errorf("cannot create directory %q: %w", dir, err)
 	}
 	probe := filepath.Join(dir, ".cadenza-write-test")
 	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
-		return fmt.Errorf("output directory %q is not writable: %w", dir, err)
+		return fmt.Errorf("directory %q is not writable: %w", dir, err)
 	}
-	_ = os.Remove(probe)
+	_ = os.Remove(probe) // best-effort cleanup
 	return nil
 }
 

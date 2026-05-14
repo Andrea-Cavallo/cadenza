@@ -5,11 +5,11 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "{{.Info.ProductVersion}}",
-			"CompanyName": "{{.Info.CompanyName}}",
-			"FileDescription": "{{.Info.ProductName}}",
-			"LegalCopyright": "{{.Info.Copyright}}",
-			"ProductName": "{{.Info.ProductName}}",
-			"Comments": "{{.Info.Comments}}"
+			"CompanyName": "Andrea Cavallo",
+			"FileDescription": "Cadenza - AI-powered MIDI generator",
+			"LegalCopyright": "Andrea Cavallo",
+			"ProductName": "Cadenza",
+			"Comments": "AI-powered MIDI generator for progressive house / melodic techno"
 		}
 	}
 }

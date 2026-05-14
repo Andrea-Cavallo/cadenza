@@ -126,9 +126,9 @@ function Assert-PackageContents {
     }
 
     if ($isWindows) {
-        $desktopExe = Join-Path $desktopDir "cadenza-desktop.exe"
+        $desktopExe = Join-Path $desktopDir "Cadenza.exe"
         if (-not (Test-Path $desktopExe)) {
-            throw "Windows package must contain desktop\cadenza-desktop.exe."
+            throw "Windows package must contain desktop\Cadenza.exe."
         }
     }
 }
@@ -300,7 +300,7 @@ foreach ($pkg in $packages) {
     Copy-Item -Path (Join-Path $repoRoot "README.md") -Destination $stageDir -Force
     Copy-Item -Path (Join-Path $repoRoot "LICENSE") -Destination $stageDir -Force
 
-    $desktopExpected = $desktopNote -like "Desktop app included*"
+    $desktopExpected = [bool]("$desktopNote" -like "Desktop app included*")
     Assert-PackageContents -StageDir $stageDir -PackageName $pkg.Name -DesktopExpected $desktopExpected
 
     $zipPath = Join-Path $distDir $pkg.Zip

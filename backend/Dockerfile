@@ -15,7 +15,6 @@ RUN apk add --no-cache ca-certificates && \
     adduser -D -g '' cadenza
 
 COPY --from=builder /bin/cadenza /usr/local/bin/cadenza
-COPY prompts/ /app/prompts/
 
 WORKDIR /app
 RUN mkdir -p /app/output && chown cadenza:cadenza /app/output
