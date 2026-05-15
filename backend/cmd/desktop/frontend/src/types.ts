@@ -30,6 +30,7 @@ export interface GenerateResult {
   elapsed: string
   seed: string
   preview: GenerationPreview
+  warnings?: string[]
 }
 
 export interface ExportEditedRequest {

@@ -28,7 +28,13 @@ func buildProvider(noLLM bool, providerName, model string) (llm.Provider, error)
 		return llm.NewOpenAIProvider(model)
 	case "gemini":
 		return llm.NewGeminiProvider(model)
+	case "deepseek":
+		return llm.NewDeepSeekProvider(model)
+	case "groq":
+		return llm.NewGroqProvider(model)
+	case "mistral":
+		return llm.NewMistralProvider(model)
 	default:
-		return nil, fmt.Errorf("unknown provider %q (supported: claude, ollama, openai, gemini, offline)", providerName)
+		return nil, fmt.Errorf("unknown provider %q (supported: claude, ollama, openai, gemini, deepseek, groq, mistral, offline)", providerName)
 	}
 }

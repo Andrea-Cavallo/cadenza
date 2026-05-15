@@ -62,3 +62,31 @@ providers:
         name: "Gemini 1.5 Pro    — 1M context window"
       - id: gemini-1.5-flash
         name: "Gemini 1.5 Flash  — cost-effective"
+
+  deepseek:
+    default: deepseek-chat
+    models:
+      - id: deepseek-chat
+        name: "DeepSeek-V3        — flagship, best music/JSON"
+      - id: deepseek-reasoner
+        name: "DeepSeek-R1        — chain-of-thought reasoning"
+
+  groq:
+    default: llama-3.3-70b-versatile
+    models:
+      - id: llama-3.3-70b-versatile
+        name: "Llama 3.3 70B     — ultra-fast LPU inference"
+      - id: mixtral-8x7b-32768
+        name: "Mixtral 8x7B      — MoE, 32k context"
+      - id: deepseek-r1-distill-llama-70b
+        name: "DeepSeek-R1 Llama — chain-of-thought on LPU"
+
+  mistral:
+    default: mistral-large-latest
+    models:
+      - id: mistral-large-latest
+        name: "Mistral Large     — flagship European model"
+      - id: mistral-medium-latest
+        name: "Mistral Medium    — balanced quality/speed"
+      - id: codestral-latest
+        name: "Codestral         — code & structured JSON"

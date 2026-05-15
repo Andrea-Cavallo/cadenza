@@ -458,6 +458,12 @@ func buildProvider(cfg Config) (llm.Provider, error) {
 		return llm.NewOpenAIProvider(cfg.Model)
 	case "gemini":
 		return llm.NewGeminiProvider(cfg.Model)
+	case "deepseek":
+		return llm.NewDeepSeekProvider(cfg.Model)
+	case "groq":
+		return llm.NewGroqProvider(cfg.Model)
+	case "mistral":
+		return llm.NewMistralProvider(cfg.Model)
 	default:
 		return nil, fmt.Errorf("unknown provider %q", cfg.Provider)
 	}

@@ -119,10 +119,11 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 			a.emitProgressStep("warn", w)
 		}
 		return GenerateResult{
-			Files:   result.Files,
-			Elapsed: time.Since(start).Round(time.Millisecond).String(),
-			Seed:    seed,
-			Preview: buildGenerationPreview(regenCtx, result.Specs),
+			Files:    result.Files,
+			Elapsed:  time.Since(start).Round(time.Millisecond).String(),
+			Seed:     seed,
+			Preview:  buildGenerationPreview(regenCtx, result.Specs),
+			Warnings: mg.Warnings(),
 		}, nil
 	}
 
@@ -181,15 +182,16 @@ func (a *AppService) Generate(req GenerateRequest) (GenerateResult, error) {
 	slog.Info("desktop generation finished", "files", len(result.Files), "elapsed", time.Since(start).Round(time.Millisecond).String())
 
 	return GenerateResult{
-		Files:   result.Files,
-		Elapsed: time.Since(start).Round(time.Millisecond).String(),
-		Seed:    seed,
-		Preview: buildGenerationPreview(musicCtx, result.Specs),
+		Files:    result.Files,
+		Elapsed:  time.Since(start).Round(time.Millisecond).String(),
+		Seed:     seed,
+		Preview:  buildGenerationPreview(musicCtx, result.Specs),
+		Warnings: mg.Warnings(),
 	}, nil
 }
 
 func (a *AppService) GetProviders() []string {
-	return []string{"claude", "ollama", "openai", "gemini", "offline"}
+	return []string{"claude", "ollama", "openai", "gemini", "deepseek", "groq", "mistral", "offline"}
 }
 
 func (a *AppService) GetModels(provider string) []ModelInfo {
@@ -226,11 +228,17 @@ func (a *AppService) GetProviderStatus(provider string) ProviderStatus {
 		return providerEnvStatus(base, "OPENAI_API_KEY", "Set OPENAI_API_KEY in your environment, then restart Cadenza.")
 	case "gemini":
 		return providerEnvStatus(base, "GEMINI_API_KEY", "Set GEMINI_API_KEY in your environment, then restart Cadenza.")
+	case "deepseek":
+		return providerEnvStatus(base, "DEEPSEEK_API_KEY", "Set DEEPSEEK_API_KEY in your environment, then restart Cadenza.")
+	case "groq":
+		return providerEnvStatus(base, "GROQ_API_KEY", "Set GROQ_API_KEY in your environment, then restart Cadenza.")
+	case "mistral":
+		return providerEnvStatus(base, "MISTRAL_API_KEY", "Set MISTRAL_API_KEY in your environment, then restart Cadenza.")
 	case "ollama":
 		return a.ollamaStatus(base)
 	default:
 		base.Message = fmt.Sprintf("Unknown provider %q.", provider)
-		base.SetupHint = "Choose offline, claude, ollama, openai, or gemini."
+		base.SetupHint = "Choose offline, claude, ollama, openai, gemini, deepseek, groq, or mistral."
 		return base
 	}
 }
@@ -318,6 +326,12 @@ func (a *AppService) OpenProviderSetup(provider string) error {
 		return openURL("https://platform.openai.com/api-keys")
 	case "gemini":
 		return openURL("https://aistudio.google.com/app/apikey")
+	case "deepseek":
+		return openURL("https://platform.deepseek.com/api_keys")
+	case "groq":
+		return openURL("https://console.groq.com/keys")
+	case "mistral":
+		return openURL("https://console.mistral.ai/api-keys")
 	default:
 		return nil
 	}

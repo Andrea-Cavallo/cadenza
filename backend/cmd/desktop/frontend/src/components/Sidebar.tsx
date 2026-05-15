@@ -2,6 +2,7 @@ import { Dispatch, SetStateAction } from 'react'
 import { useGenerator } from '../useGenerator'
 import { GenerationPreview, Params, ProviderStatus } from '../types'
 import { providerLabel } from '../lib/labels'
+import { FallbackWarningModal } from './FallbackWarningModal'
 
 const KEYS = [
   'Am', 'Bm', 'Cm', 'Dm', 'Em', 'Fm', 'Gm',
@@ -13,7 +14,7 @@ const KEYS = [
   'C-lydian', 'D-lydian',
 ]
 const BARS_OPTS = [16, 32, 64, 128]
-const PROVIDERS = ['offline', 'claude', 'ollama', 'openai', 'gemini']
+const PROVIDERS = ['offline', 'claude', 'ollama', 'openai', 'gemini', 'deepseek', 'groq', 'mistral']
 const STYLE_FAMILIES = [
   { id: 'groove' as const, label: 'Groove' },
   { id: 'rolling' as const, label: 'Rolling' },
@@ -54,6 +55,7 @@ export function Sidebar({
 }: SidebarProps) {
   const {
     statusLoading, pulling, generationStep, modelChoices, canGenerate,
+    fallbackWarning, clearFallbackWarning,
     refreshProvider, selectProvider, handleStartOllama,
     handlePullModel, handleGenerate, handleSameHarmony,
     handleRegenTrack, handleAB, openProviderSetup,
@@ -293,6 +295,12 @@ export function Sidebar({
           </div>
         )}
       </div>
+
+      <FallbackWarningModal
+        open={fallbackWarning.length > 0}
+        onClose={clearFallbackWarning}
+        warnings={fallbackWarning}
+      />
     </aside>
   )
 }

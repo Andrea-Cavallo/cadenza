@@ -10,6 +10,12 @@ export function providerLabel(provider: string): string {
       return 'Ollama'
     case 'offline':
       return 'Offline'
+    case 'deepseek':
+      return 'DeepSeek'
+    case 'groq':
+      return 'Groq'
+    case 'mistral':
+      return 'Mistral'
     default:
       return provider || 'Provider'
   }

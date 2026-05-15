@@ -45,7 +45,8 @@
       "Bash(\\\\\"github.com/Andrea-Cavallo/cadenza/internal/theory)",
       "Bash(powershell.exe -Command ' *)",
       "Bash(xxd)",
-      "Bash(bash /tmp/check_special.sh)"
+      "Bash(bash /tmp/check_special.sh)",
+      "PowerShell(Copy-Item *)"
     ]
   }
 }

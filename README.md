@@ -20,6 +20,10 @@
   Offline. Harmonically coherent. Drop-in ready for any DAW.
 </p>
 
+<p align="center">
+  🎵 <a href="cadenza.mp3"><strong>Listen to the demo</strong></a> — generated with Cadenza, A minor 122 BPM, offline mode
+</p>
+
 ---
 
 ## Overview
@@ -180,21 +184,21 @@ export GEMINI_API_KEY=...
 
 Run entirely on-device. No API key, no cloud, full privacy. After the one-time model download Cadenza works 100 % offline with LLM creativity.
 
-The screenshots below are real output generated with **Gemma** running locally via Ollama:
+The screenshots below are real output generated with **DeepSeek** running locally via Ollama — a quick test to validate the stem quality with a different local model:
 
 <p align="center">
-  <img src="bass.png" alt="Bass stem — generated with Ollama + Gemma" width="640" /><br/>
-  <em>Bass groove stem — Ollama + Gemma</em>
+  <img src="bass.png" alt="Bass stem — generated with Ollama + DeepSeek" width="640" /><br/>
+  <em>Bass groove stem — Ollama + DeepSeek (local, no API key)</em>
 </p>
 
 <p align="center">
-  <img src="arp.png" alt="Arpeggio stem — generated with Ollama + Gemma" width="640" /><br/>
-  <em>Arpeggio stem — Ollama + Gemma</em>
+  <img src="arp.png" alt="Arpeggio stem — generated with Ollama + DeepSeek" width="640" /><br/>
+  <em>Arpeggio stem — Ollama + DeepSeek (local, no API key)</em>
 </p>
 
 <p align="center">
-  <img src="melody.png" alt="Melody stem — generated with Ollama + Gemma" width="640" /><br/>
-  <em>Melody stem — Ollama + Gemma</em>
+  <img src="melody.png" alt="Melody stem — generated with Ollama + DeepSeek" width="640" /><br/>
+  <em>Melody stem — Ollama + DeepSeek (local, no API key)</em>
 </p>
 
 ##### Step 1 — Install Ollama
@@ -289,6 +293,17 @@ Swap `--model gemma` for any model name returned by `ollama list`.
 | `mistral` | ~4 GB | Good fallback if others are slow |
 
 > **Performance tip:** Ollama runs faster with a GPU. On CPU-only machines use `llama3.2` or `mistral` for lower latency. Generation time is typically 5–30 s depending on hardware.
+
+---
+
+## DAW Preview
+
+Import the seven generated MIDI stems directly into your DAW — Ableton Live, FL Studio, Logic Pro, or any other. No editing required; they are already harmonically locked to a shared chord progression.
+
+<p align="center">
+  <img src="daw.png" alt="Cadenza MIDI stems imported in Ableton Live" width="760" /><br/>
+  <em>Seven MIDI stems imported into Ableton Live — bass groove, rolling, sub, arp, melody, chord pad, lead stab</em>
+</p>
 
 ---
 

@@ -16,10 +16,11 @@ type GenerateRequest struct {
 }
 
 type GenerateResult struct {
-	Files   []string          `json:"files"`
-	Elapsed string            `json:"elapsed"`
-	Seed    string            `json:"seed"`
-	Preview GenerationPreview `json:"preview"`
+	Files    []string          `json:"files"`
+	Elapsed  string            `json:"elapsed"`
+	Seed     string            `json:"seed"`
+	Preview  GenerationPreview `json:"preview"`
+	Warnings []string          `json:"warnings"`
 }
 
 type ExportEditedRequest struct {

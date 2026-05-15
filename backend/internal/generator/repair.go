@@ -340,11 +340,10 @@ func repairChordCoherence(spec *schema.PatternSpec, prog theory.ChordProgression
 			if err != nil {
 				continue
 			}
-			newMIDI := nearestChordToneMIDI(midi, chordTones, c)
-			if newMIDI < 0 {
+			newNote := nearestChordToneNote(midi, chordTones, c)
+			if newNote == "" {
 				continue
 			}
-			newNote := theory.MIDIToNote(newMIDI)
 			slog.Debug("repair: chord tone replacement",
 				"type", spec.PatternType,
 				"section", si+1,
@@ -381,10 +380,14 @@ func isChordToneName(noteName string, chordTones []string) bool {
 	return false
 }
 
-// nearestChordToneMIDI finds the chord tone MIDI value closest to midi that stays within [c[0], c[1]].
-func nearestChordToneMIDI(midi int, chordTones []string, c [4]int) int {
+// nearestChordToneNote finds the chord tone closest to midi within [c[0], c[1]] and returns the
+// note as "Name+octave" using the chord tone's own spelling (flat or sharp), so that post-repair
+// string comparison against the chord tone list always matches.
+// Example: chord tone "Ab" at MIDI 44 → "Ab2" (not "G#2" which MIDIToNote would give).
+func nearestChordToneNote(midi int, chordTones []string, c [4]int) string {
 	best := -1
 	bestDist := 1000
+	bestName := ""
 	for _, ct := range chordTones {
 		sem := noteNameSemitone(ct)
 		for oct := 0; oct <= 8; oct++ {
@@ -396,10 +399,14 @@ func nearestChordToneMIDI(midi int, chordTones []string, c [4]int) int {
 			if d < bestDist {
 				bestDist = d
 				best = m
+				bestName = fmt.Sprintf("%s%d", ct, (m/12)-1)
 			}
 		}
 	}
-	return best
+	if best < 0 {
+		return ""
+	}
+	return bestName
 }
 
 func countActiveSteps(steps []schema.StepSpec) int {
@@ -412,7 +419,9 @@ func countActiveSteps(steps []schema.StepSpec) int {
 	return n
 }
 
-// closestNoteInRange finds the MIDI value for noteName (no octave) closest to center within [minMIDI, maxMIDI].
+// closestNoteInRange finds the octave of noteName (no octave) closest to center within [minMIDI, maxMIDI].
+// Returns the note using the original noteName spelling to avoid enharmonic mismatches
+// (e.g. "Ab" stays "Ab2", not "G#2" which theory.MIDIToNote would produce).
 func closestNoteInRange(noteName string, minMIDI, maxMIDI, center int) string {
 	sem := noteNameSemitone(noteName)
 	best := -1
@@ -431,7 +440,7 @@ func closestNoteInRange(noteName string, minMIDI, maxMIDI, center int) string {
 	if best < 0 {
 		return ""
 	}
-	return theory.MIDIToNote(best)
+	return fmt.Sprintf("%s%d", noteName, (best/12)-1)
 }
 
 func noteNameSemitone(name string) int {

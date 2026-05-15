@@ -199,7 +199,7 @@ export function PianoRoll({
         <div className="empty-preview-inner splash">
           <div className="splash-frame">
             <img
-              src="/cadenza.png"
+              src="/cadenza_senza_sfondo.png"
               alt="Cadenza"
               className="splash-logo"
             />

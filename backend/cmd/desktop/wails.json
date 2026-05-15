@@ -7,5 +7,10 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "frontend:dir": "frontend",
-  "version": "2"
+  "version": "2",
+  "info": {
+    "productVersion": "1.0.0",
+    "copyright": "© 2025 Andrea Cavallo. All rights reserved.",
+    "comments": "AI-powered MIDI generator for progressive house and melodic techno. Offline-first, LLM-enhanced. github.com/Andrea-Cavallo/cadenza"
+  }
 }

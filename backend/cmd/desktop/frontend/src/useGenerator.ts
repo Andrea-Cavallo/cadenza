@@ -46,6 +46,7 @@ export function useGenerator({
   const [statusLoading, setStatusLoading] = useState(false)
   const [pulling, setPulling] = useState(false)
   const [generationStep, setGenerationStep] = useState('')
+  const [fallbackWarning, setFallbackWarning] = useState<string[]>([])
   const logQueue = useRef<string[]>([])
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -199,6 +200,10 @@ export function useGenerator({
       setPreview(result.preview)
       setLastSeed(result.seed)
       setLog(prev => [...prev, `Done in ${result.elapsed}`, `Seed ${result.seed}`])
+      if (result.warnings?.length) {
+        setFallbackWarning(result.warnings)
+        setLog(prev => [...prev, ...result.warnings!.map(w => `[warn] ${w}`)])
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setLog(prev => [...prev, ...formatOperationalError(msg, p)])
@@ -223,6 +228,10 @@ export function useGenerator({
       setPreview(result.preview)
       setLastSeed(result.seed)
       setLog(prev => [...prev, `New motifs — same harmony`, `Done in ${result.elapsed}`, `Seed ${result.seed}`])
+      if (result.warnings?.length) {
+        setFallbackWarning(result.warnings)
+        setLog(prev => [...prev, ...result.warnings!.map(w => `[warn] ${w}`)])
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setLog(prev => [...prev, ...formatOperationalError(msg, params)])
@@ -251,6 +260,10 @@ export function useGenerator({
       setPreview(prev => mergeTrackPreview(prev, result.preview))
       setLastSeed(result.seed)
       setLog(prev => [...prev, `Done — seed ${result.seed}`])
+      if (result.warnings?.length) {
+        setFallbackWarning(result.warnings)
+        setLog(prev => [...prev, ...result.warnings!.map(w => `[warn] ${w}`)])
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setLog(prev => [...prev, ...formatOperationalError(msg, params)])
@@ -280,6 +293,11 @@ export function useGenerator({
       setFilesAlt(resultB.files)
       setPreviewAlt(resultB.preview)
       setLog(prev => [...prev, `B ready — seed ${resultB.seed}`])
+      const allWarnings = [...(resultA.warnings ?? []), ...(resultB.warnings ?? [])]
+      if (allWarnings.length) {
+        setFallbackWarning(allWarnings)
+        setLog(prev => [...prev, ...allWarnings.map(w => `[warn] ${w}`)])
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setLog(prev => [...prev, ...formatOperationalError(msg, params)])
@@ -297,6 +315,8 @@ export function useGenerator({
     generationStep,
     modelChoices,
     canGenerate,
+    fallbackWarning,
+    clearFallbackWarning: () => setFallbackWarning([]),
     refreshProvider,
     selectProvider,
     handleStartOllama,

@@ -1,15 +1,22 @@
 {
 	"fixed": {
-		"file_version": "{{.Info.ProductVersion}}"
+		"file_version": "{{.Info.ProductVersion}}",
+		"product_version": "{{.Info.ProductVersion}}"
 	},
 	"info": {
 		"0000": {
 			"ProductVersion": "{{.Info.ProductVersion}}",
+			"FileVersion": "{{.Info.ProductVersion}}",
 			"CompanyName": "Andrea Cavallo",
-			"FileDescription": "Cadenza - AI-powered MIDI generator",
-			"LegalCopyright": "Andrea Cavallo",
+			"FileDescription": "Cadenza — AI-powered MIDI generator for progressive house and melodic techno",
+			"LegalCopyright": "© 2025 Andrea Cavallo. All rights reserved.",
+			"LegalTrademarks": "Cadenza",
 			"ProductName": "Cadenza",
-			"Comments": "AI-powered MIDI generator for progressive house / melodic techno"
+			"InternalName": "cadenza",
+			"OriginalFilename": "Cadenza.exe",
+			"Comments": "{{.Info.Comments}}",
+			"PrivateBuild": "",
+			"SpecialBuild": ""
 		}
 	}
 }

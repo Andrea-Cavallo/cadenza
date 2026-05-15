@@ -248,7 +248,9 @@ button {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background:
+    var(--bg),
+    url("/cadenza_senza_sfondo.png") center / contain no-repeat;
 }
 
 .workspace .roll-wrap {
