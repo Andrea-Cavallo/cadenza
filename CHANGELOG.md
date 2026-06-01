@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **README second audio preview**: added a second demo link (`cadenza-2.mp3`) next to the existing `cadenza.mp3` demo; renamed the source file from `cadenza (2).mp3` to the URL-safe `cadenza-2.mp3`.
 - **Session persistence (`internal/session/`)**: sessions are saved to `.czs` files (32-byte binary header + JSON payload) in `~/.cadenza/sessions/`. File names are derived from a SHA1 hash of the LLM message history, enabling automatic deduplication of identical histories. Implements `SessionStore` interface with `Save`, `Load`, `LoadByMessageHash`, `List`, `Delete`, and `Evict` methods.
 - **FIFO session eviction**: after every checkpoint, old sessions are automatically evicted to stay within `MaxSessions` (default 20) and `MaxSizeMB` (default 512 MB) limits, sorted by `UpdatedAt` ascending (oldest first).
 - **Checkpoint saves**: every N generations (configurable via `--checkpoint-interval`, default 3) the session state is written to disk automatically with `SaveReason: Auto`.

@@ -29,7 +29,8 @@
 </p>
 
 <p align="center">
-  🎵 <a href="cadenza.mp3"><strong>Listen to the demo</strong></a> — generated with Cadenza, A minor 122 BPM, offline mode
+  🎵 <a href="cadenza.mp3"><strong>Listen to the demo</strong></a> — generated with Cadenza, A minor 122 BPM, offline mode<br/>
+  🎧 <a href="cadenza-2.mp3"><strong>Listen to a second preview</strong></a> — another Cadenza render
 </p>
 
 ---
